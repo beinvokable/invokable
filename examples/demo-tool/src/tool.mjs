@@ -71,7 +71,7 @@ export default defineTool({
           gate: 'deploy_review',
           title: 'deployment plan',
           summary: { env: opts.env, replicas: plan.replicas, image: plan.image },
-          subject: plan.serviceId,
+          subject: plan.id,
           question: `Deploy to ${opts.env}?`,
           explain: 'Approving starts the deploy and bills 1 credit per minute.',
           spend: { estimated: plan.credits, balance: plan.balance },

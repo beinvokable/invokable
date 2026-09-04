@@ -25,18 +25,26 @@ function json(body: unknown, status = 200): Response {
 
 const STALE_MESSAGE: Record<CheckpointFailure, string> = {
   not_found: 'No approval matches that fingerprint.',
+  gate_mismatch: 'That approval was issued for a different gate.',
+  subject_mismatch: 'That approval was issued for a different target.',
   mismatch: 'The plan changed since this approval was issued.',
   expired: 'This approval has expired.',
   consumed: 'This approval was already used.',
 };
 
 /** Maps a verification failure onto the 409 the client turns into exit 12. */
-export function staleResponse(reason: CheckpointFailure, retryCommand?: string): Response {
+export function staleResponse(
+  reason: CheckpointFailure,
+  retryCommand?: string,
+  detail?: string,
+): Response {
   return json(
     {
       error: 'checkpoint_stale',
       code: 'checkpoint_stale',
-      message: STALE_MESSAGE[reason],
+      // The detail names a wiring mistake precisely; without it a subject
+      // mismatch is indistinguishable from a forged fingerprint.
+      message: detail ? `${STALE_MESSAGE[reason]} (${detail})` : STALE_MESSAGE[reason],
       reason,
       remediation: retryCommand ?? 'Re-run the command without --approve to get a fresh plan.',
     },
@@ -96,7 +104,7 @@ export function checkpointRoutes(options: CheckpointRoutesOptions) {
         ...(typeof expected === 'string' ? { expectedSummaryHash: expected } : {}),
       });
 
-      if (!result.ok) return staleResponse(result.reason ?? 'not_found');
+      if (!result.ok) return staleResponse(result.reason ?? 'not_found', undefined, result.detail);
       return json({ valid: true, gate, expiresAt: new Date(result.record!.expiresAt).toISOString() });
     }
 
@@ -152,7 +160,7 @@ export function verifyCheckpoint(options: VerifyCheckpointOptions) {
       fingerprint: header.fingerprint,
     });
 
-    if (!result.ok) return staleResponse(result.reason ?? 'not_found');
+    if (!result.ok) return staleResponse(result.reason ?? 'not_found', undefined, result.detail);
     return null;
   };
 }

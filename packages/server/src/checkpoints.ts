@@ -72,11 +72,12 @@ export interface CheckpointRecord {
 
 export interface CheckpointStore {
   createCheckpoint(record: CheckpointRecord): Promise<void>;
-  findCheckpoint(
-    gate: string,
-    subject: string,
-    fingerprint: string,
-  ): Promise<CheckpointRecord | null>;
+  /**
+   * Looks up by fingerprint alone. The gate and subject are compared by the
+   * verifier rather than folded into the query, so that an approval issued for
+   * a different target can be reported as such instead of as "unknown".
+   */
+  findCheckpoint(fingerprint: string): Promise<CheckpointRecord | null>;
   consumeCheckpoint(fingerprint: string, at: number): Promise<boolean>;
 }
 
@@ -89,11 +90,8 @@ export function memoryCheckpointStore(): CheckpointStore & {
     async createCheckpoint(record) {
       records.set(record.fingerprint, record);
     },
-    async findCheckpoint(gate, subject, fingerprint) {
-      const found = records.get(fingerprint);
-      if (!found) return null;
-      if (found.gate !== gate || found.subject !== subject) return null;
-      return found;
+    async findCheckpoint(fingerprint) {
+      return records.get(fingerprint) ?? null;
     },
     async consumeCheckpoint(fingerprint, at) {
       const found = records.get(fingerprint);
@@ -109,6 +107,8 @@ export function memoryCheckpointStore(): CheckpointStore & {
 
 export type CheckpointFailure =
   | 'not_found'
+  | 'gate_mismatch'
+  | 'subject_mismatch'
   | 'mismatch'
   | 'expired'
   | 'consumed';
@@ -117,6 +117,8 @@ export interface VerifyResult {
   ok: boolean;
   reason?: CheckpointFailure;
   record?: CheckpointRecord;
+  /** Extra context for a mismatch, safe to show a developer. */
+  detail?: string;
 }
 
 export interface CheckpointVerifierOptions {
@@ -190,8 +192,31 @@ export class CheckpointVerifier {
     fingerprint: string;
     expectedSummaryHash?: string;
   }): Promise<VerifyResult> {
-    const record = await this.store.findCheckpoint(input.gate, input.subject, input.fingerprint);
+    const record = await this.store.findCheckpoint(input.fingerprint);
     if (!record) return { ok: false, reason: 'not_found' };
+
+    // Reported separately from "not found". A gate or subject that disagrees
+    // between the CLI and the middleware is a wiring mistake, and calling it an
+    // unknown fingerprint sends the integrator looking in the wrong place.
+    if (record.gate !== input.gate) {
+      return {
+        ok: false,
+        reason: 'gate_mismatch',
+        record,
+        detail: `issued for gate "${record.gate}", presented for "${input.gate}"`,
+      };
+    }
+    if (record.subject !== input.subject) {
+      return {
+        ok: false,
+        reason: 'subject_mismatch',
+        record,
+        detail:
+          `issued for subject ${JSON.stringify(record.subject)}, presented for ` +
+          `${JSON.stringify(input.subject)} — the \`subject\` passed to checkpoint() must ` +
+          'equal what `subjectFor` returns in verifyCheckpoint()',
+      };
+    }
 
     const recomputes = [this.secret, this.previousSecret]
       .filter((s): s is string => Boolean(s))

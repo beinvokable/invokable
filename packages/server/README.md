@@ -27,7 +27,7 @@ workers can call it directly; `./node` adapts it to `node:http` and Express
 (`expressMiddleware`).
 
 A runnable version is in
-[`examples/self-host-auth`](../../examples/self-host-auth/server.mjs).
+[`examples/server`](../../examples/server/server.mjs).
 
 ## Endpoints
 

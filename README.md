@@ -11,18 +11,79 @@ money. `invokable` is that layer, as a library.
 > approval gates, the agent-instruction generator, the scaffolder and the
 > conformance checker are implemented and tested. See [Roadmap](#roadmap).
 
+## How the pieces fit
+
+```
+   the agent                your CLI                    your server
+  ┌──────────┐         ┌──────────────────┐        ┌───────────────────┐
+  │  Claude  │ runs    │  @invokable/core │  HTTP  │ @invokable/server │
+  │  Codex   │────────▶│                  │───────▶│                   │
+  │  Cursor  │◀────────│  one JSON doc    │◀───────│  auth endpoints   │
+  │  Gemini  │  exit   │  + exit code     │        │  checkpoint verify│
+  └──────────┘  code   └──────────────────┘        └───────────────────┘
+       ▲                        │                            │
+       │ reads                  │ generates                  │ your code
+       │                        ▼                            ▼
+  ┌──────────────────────────────────┐          ┌───────────────────────┐
+  │ @invokable/skills → SKILL.md     │          │  your API endpoints   │
+  │ .claude/ .codex/ .cursor/ …      │          │  (guarded where they  │
+  └──────────────────────────────────┘          │   spend money)        │
+                                                └───────────────────────┘
+```
+
+You write the CLI's commands and your API. Everything else — the output format,
+login, the approval gate, the agent instructions — comes from the packages.
+
 ## Packages
 
-| Package | Status | What it does |
+| Package | | What it does |
 |---|---|---|
-| `@invokable/core` | 🟢 contract, auth, gates | Output envelope, exit codes, command schema, config store, device-code login, `checkpoint()` |
-| `@invokable/server` | 🟢 device flow + gates | Device-flow endpoints, checkpoint issuance and one-shot verification |
-| `@invokable/skills` | 🟢 generator done | Generates a portable `SKILL.md` and installs it for every major agent |
-| `create-invokable` | 🟢 scaffolder done | Project scaffolder |
-| `@invokable/conformance` | 🟢 checker done | `invokable-test`: verifies a CLI honours the contract |
+| [`@invokable/core`](https://www.npmjs.com/package/@invokable/core) | [src](packages/core) · [docs](packages/core/README.md) | The runtime: output envelope, exit codes, command schema, config store, `login`, `checkpoint()` |
+| [`@invokable/server`](https://www.npmjs.com/package/@invokable/server) | [src](packages/server) · [docs](packages/server/README.md) | Device-flow auth endpoints, checkpoint issuing and one-shot verification |
+| [`@invokable/skills`](https://www.npmjs.com/package/@invokable/skills) | [src](packages/skills) · [docs](packages/skills/README.md) | Generates a portable `SKILL.md` and installs it for every major agent |
+| [`@invokable/conformance`](https://www.npmjs.com/package/@invokable/conformance) | [src](packages/conformance) · [docs](packages/conformance/README.md) | `invokable-test` — checks a CLI honours the contract |
+| [`create-invokable`](https://www.npmjs.com/package/create-invokable) | [src](packages/create-invokable) · [docs](packages/create-invokable/README.md) | Scaffolds a project |
+
+Examples: [`examples/demo-tool`](examples/demo-tool) is a working CLI;
+[`examples/server`](examples/server) is a complete backend with a runnable
+walkthrough of the whole exchange.
 
 The hosted auth service lives in a separate private repository; see
 [ADR 0001](docs/adr/0001-repository-topology.md) for why.
+
+## Quickstart
+
+```console
+$ npx create-invokable my-tool
+? Auth server?
+  1) hosted  (default)
+  2) self-host
+? First command? (deploy)
+? Does it spend money or need approval? [Y/n]
+
+Created ./my-tool
+```
+
+You get a buildable TypeScript project with a working `login`, the four
+built-ins, an approval gate on the first command if it spends, generated agent
+instructions, and CI running both contract checks.
+
+```bash
+cd my-tool && npm install && npm run build
+
+node bin/my-tool.mjs init        # install agent instructions
+node bin/my-tool.mjs doctor --json
+npx invokable-test node bin/my-tool.mjs
+```
+
+To see the whole system working — login, an approval gate, a deploy, a refused
+replay — clone this repo and run:
+
+```bash
+pnpm install && pnpm build
+node examples/server/server.mjs   # terminal 1
+node examples/server/demo.mjs     # terminal 2
+```
 
 ## The contract
 
@@ -222,23 +283,6 @@ schema change nobody regenerated:
 - run: npx demo-tool init --check
 ```
 
-## Start a tool
-
-```console
-$ npx create-invokable my-deployer
-? Auth server?
-  1) hosted  (default)
-  2) self-host
-? First command? (deploy)
-? Does it spend money or need approval? [Y/n]
-
-Created ./my-deployer
-```
-
-You get a buildable TypeScript project with a working `login`, the four
-built-ins, an approval gate on the first command if it spends, generated agent
-instructions, and a CI workflow that runs both contract checks.
-
 ## Check the contract holds
 
 ```console
@@ -267,29 +311,25 @@ manifest could deploy something or spend money, and tools where that matters are
 exactly the ones this suite exists for. Nominate extra safe commands with
 `--safe-command`.
 
-## Try it
+## Working on this repo
 
 ```bash
 pnpm install
 pnpm build
 pnpm test
 
+# The example CLI
 node examples/demo-tool/bin/demo-tool.mjs greet --name Ido --json
 node examples/demo-tool/bin/demo-tool.mjs find-project nope --json; echo "exit $?"
+
+# The full exchange, against a real server
+node examples/server/server.mjs &
+node examples/server/demo.mjs
 ```
 
-To exercise the full login flow, run the self-hosted auth server and point the
-example tool at it:
-
-```bash
-node examples/self-host-auth/server.mjs &
-
-DEMO_TOOL_API=http://127.0.0.1:8787 \
-DEMO_TOOL_CONFIG_DIR=/tmp/demo-cfg \
-  node examples/demo-tool/bin/demo-tool.mjs login
-```
-
-It prints a code and a URL; open the URL and click Approve.
+See [`examples/server/README.md`](examples/server/README.md) for what a backend
+has to provide, how to mount it in an app you already have, and what must change
+before production.
 
 ## What this does not do
 

@@ -99,7 +99,10 @@ describe('CheckpointVerifier', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('rejects a fingerprint for a different gate or subject', async () => {
+  it('names a gate or subject mismatch instead of calling it unknown', async () => {
+    // These are wiring mistakes — the `subject` passed to checkpoint() not
+    // matching what `subjectFor` returns. Reporting them as "no such
+    // fingerprint" sends the integrator hunting for a forgery that isn't there.
     const { verifier } = make();
     const rec = await verifier.issue({
       gate: 'deploy',
@@ -107,8 +110,31 @@ describe('CheckpointVerifier', () => {
       summaryHash: hashSummary(serverStable(plan)),
     });
 
-    expect((await verifier.verify({ gate: 'destroy', subject: 'svc-1', fingerprint: rec.fingerprint })).reason).toBe('not_found');
-    expect((await verifier.verify({ gate: 'deploy', subject: 'svc-2', fingerprint: rec.fingerprint })).reason).toBe('not_found');
+    const wrongGate = await verifier.verify({
+      gate: 'destroy',
+      subject: 'svc-1',
+      fingerprint: rec.fingerprint,
+    });
+    expect(wrongGate).toMatchObject({ ok: false, reason: 'gate_mismatch' });
+    expect(wrongGate.detail).toContain('deploy');
+
+    const wrongSubject = await verifier.verify({
+      gate: 'deploy',
+      subject: 'svc-2',
+      fingerprint: rec.fingerprint,
+    });
+    expect(wrongSubject).toMatchObject({ ok: false, reason: 'subject_mismatch' });
+    expect(wrongSubject.detail).toContain('subjectFor');
+  });
+
+  it('still reports a genuinely unknown fingerprint as not_found', async () => {
+    const { verifier } = make();
+    const result = await verifier.verify({
+      gate: 'deploy',
+      subject: 'svc-1',
+      fingerprint: 'ZZZZZZZZZZZZZZZZ',
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'not_found' });
   });
 
   it('rejects a fabricated fingerprint', async () => {

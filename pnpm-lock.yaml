@@ -27,10 +27,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/skills
 
-  examples/self-host-auth:
+  examples/server:
     dependencies:
       '@invokable/server':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../../packages/server
 
   packages/conformance:
