@@ -75,6 +75,24 @@ describe('scaffolded files', () => {
     expect(ci).toContain('init --check');
   });
 
+  it('pins the SDK to this package\'s own version', () => {
+    // A hardcoded range goes stale on every release: the packages share one
+    // version, and `^0.2.0` does not resolve to 0.3.0. A project scaffolded by
+    // 0.3.0 must install the 0.3.0 SDK, not the one that was current when this
+    // template was written.
+    const own = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ).version;
+    const pkg = JSON.parse(fileMap({ ...base, auth: 'self-host' }).get('package.json')!);
+
+    for (const [name, range] of [
+      ...Object.entries(pkg.dependencies),
+      ...Object.entries(pkg.devDependencies),
+    ]) {
+      if (name.startsWith('@invokable/')) expect([name, range]).toEqual([name, `^${own}`]);
+    }
+  });
+
   it('names the generated plan type after the command', () => {
     const source = fileMap({ ...base, command: 'ship-it' }).get('src/tool.ts')!;
     expect(source).toContain('interface ShipItPlan');

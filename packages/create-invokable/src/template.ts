@@ -1,3 +1,20 @@
+import { readFileSync } from 'node:fs';
+
+/**
+ * The `@invokable/*` range a scaffolded project depends on.
+ *
+ * Read from this package's own version rather than written down. Every package
+ * in the monorepo shares one version, and a caret range on 0.x does not cross a
+ * minor bump — so a hardcoded `^0.2.0` left here would make
+ * `create-invokable@0.3.0` scaffold projects pinned to an SDK it was never
+ * tested against.
+ */
+function sdkRange(): string {
+  const manifest = new URL('../package.json', import.meta.url);
+  const { version } = JSON.parse(readFileSync(manifest, 'utf8')) as { version: string };
+  return `^${version}`;
+}
+
 /** `deploy-thing` -> `DeployThing`, for a generated type name. */
 function pascal(value: string): string {
   return value
@@ -274,6 +291,14 @@ npm run build
 node bin/${spec.name}.mjs --help
 \`\`\`
 
+\`${spec.name}\` is not on your PATH until you link it, so run it by path while
+developing. To type the bare name instead:
+
+\`\`\`bash
+npm link          # once
+${spec.name} --help
+\`\`\`
+
 ## Try it
 
 \`\`\`bash
@@ -388,6 +413,7 @@ whenever you add a command; \`init --check\` fails CI when they are stale.
 
 export function scaffold(spec: ScaffoldSpec): ScaffoldFile[] {
   const version = spec.version ?? '0.1.0';
+  const sdk = sdkRange();
 
   const pkg = {
     name: spec.name,
@@ -405,13 +431,13 @@ export function scaffold(spec: ScaffoldSpec): ScaffoldFile[] {
       prepublishOnly: 'npm run build',
     },
     dependencies: {
-      '@invokable/core': '^0.2.0',
-      '@invokable/skills': '^0.2.0',
+      '@invokable/core': sdk,
+      '@invokable/skills': sdk,
       // Only self-host projects ship a server; hosted tools talk to one.
-      ...(spec.auth === 'self-host' ? { '@invokable/server': '^0.2.0' } : {}),
+      ...(spec.auth === 'self-host' ? { '@invokable/server': sdk } : {}),
     },
     devDependencies: {
-      '@invokable/conformance': '^0.2.0',
+      '@invokable/conformance': sdk,
       '@types/node': '^22.0.0',
       typescript: '^5.9.0',
     },
