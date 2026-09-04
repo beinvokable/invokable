@@ -1,0 +1,10 @@
+{
+  "name": "@invokable-examples/demo-tool",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "demo-tool": "./bin/demo-tool.mjs" },
+  "dependencies": {
+    "@invokable/core": "workspace:*"
+  }
+}

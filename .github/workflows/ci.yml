@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck and build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Smoke-test the example tool
+        run: |
+          set -euo pipefail
+          out=$(node examples/demo-tool/bin/demo-tool.mjs greet --name ci --json 2>/dev/null)
+          echo "$out" | jq -e '.status == "ok"' > /dev/null
+          test "$(echo "$out" | wc -l)" -eq 1
+
+          set +e
+          node examples/demo-tool/bin/demo-tool.mjs find-project nope --json >/dev/null 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 5 || { echo "expected exit 5, got $code"; exit 1; }
