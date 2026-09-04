@@ -7,6 +7,7 @@ import { buildManifest, renderCommandHelp, renderToolHelp } from './help.js';
 import { ConfigStore, resolveToken } from './config.js';
 import { ApiClient, unconfiguredClient } from './http.js';
 import { resolveCommands } from './builtins.js';
+import { CheckpointPending } from './checkpoint.js';
 import type { CommandContext, DefinedTool, ResolvedOptions } from './schema.js';
 
 export interface RunOptions {
@@ -110,10 +111,14 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
         })
       : unconfiguredClient(tool.name);
 
+    const checkpointClient = tool.api?.baseUrl ? client : undefined;
+
     const ctx: CommandContext = {
       tool,
       config,
       tokenSource,
+      checkpointClient,
+      attachCheckpoint: (gate, fingerprint) => client.setCheckpoint(gate, fingerprint),
       json: globals.json,
       yes: globals.yes,
       maxSpend: globals.maxSpend,
@@ -121,6 +126,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
       commandName,
       io,
       positionals: parsed.positionals,
+      argv,
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,6 +158,20 @@ function finish(
 }
 
 function failure(io: Io, e: unknown): RunResult {
+  // A pending gate is not a failure: it is the documented way a command stops
+  // to ask. It carries its own envelope and the reserved exit code 10.
+  if (e instanceof CheckpointPending) {
+    if (io.json) {
+      if (!io.hasEmitted) io.emit(e.envelope);
+    } else {
+      io.note(e.envelope.display);
+      io.note('');
+      io.note(`To approve, run:\n  ${e.envelope.next.approve}`);
+      if (e.envelope.next.reject) io.note(`To decline, run:\n  ${e.envelope.next.reject}`);
+    }
+    return { exitCode: EXIT.checkpoint_pending, envelope: e.envelope };
+  }
+
   const err = isInvokableError(e)
     ? e
     : new InvokableError({

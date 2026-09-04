@@ -1,4 +1,4 @@
-import { command, defineTool, InvokableError } from '@invokable/core';
+import { checkpoint, command, defineTool, InvokableError } from '@invokable/core';
 
 /**
  * The smallest tool that exercises the whole contract: a success path, a
@@ -52,6 +52,30 @@ export default defineTool({
           });
         }
         return { slug, status: 'active' };
+      },
+    }),
+
+    deploy: command({
+      description: 'Deploy the current project. Stops for approval before spending.',
+      options: {
+        env: { type: 'string', required: true, choices: ['staging', 'prod'] },
+      },
+      spends: true,
+      run: async ({ opts, client, ctx }) => {
+        const plan = await client.post('/v1/deploy/plan', { env: opts.env });
+
+        await checkpoint(ctx, {
+          gate: 'deploy_review',
+          title: 'deployment plan',
+          summary: { env: opts.env, replicas: plan.replicas, image: plan.image },
+          subject: plan.serviceId,
+          question: `Deploy to ${opts.env}?`,
+          explain: 'Approving starts the deploy and bills 1 credit per minute.',
+          spend: { estimated: plan.credits, balance: plan.balance },
+          reject: `demo-tool deploy --env ${opts.env} --dry-run`,
+        });
+
+        return client.post('/v1/deploy', { env: opts.env, planId: plan.id });
       },
     }),
 

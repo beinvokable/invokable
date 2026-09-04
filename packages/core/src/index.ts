@@ -12,7 +12,7 @@ export type {
   Envelope,
   OkEnvelope,
   ErrorEnvelope,
-  CheckpointPayload,
+  CheckpointEnvelope,
   CheckpointChoice,
   SpendInfo,
 } from './envelope.js';
@@ -78,6 +78,11 @@ export {
   whoamiCommand,
   doctorCommand,
 } from './builtins.js';
+
+export { checkpoint, renderCheckpointPanel, CheckpointPending } from './checkpoint.js';
+export type { CheckpointOptions, CheckpointResult } from './checkpoint.js';
+
+export { stableStringify, summaryHash } from './canonical.js';
 
 export { runTool, cli } from './run.js';
 export type { RunOptions, RunResult } from './run.js';

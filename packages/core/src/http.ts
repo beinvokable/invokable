@@ -91,6 +91,8 @@ export class ApiClient {
   private readonly timeoutMs: number;
   private readonly fetchImpl: FetchLike;
   private readonly agent: string;
+  /** Set by `checkpoint()` once an approval is validated for this run. */
+  private checkpointHeader: string | undefined;
 
   constructor(opts: ApiClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
@@ -120,6 +122,14 @@ export class ApiClient {
     return Boolean(this.token);
   }
 
+  /**
+   * Attaches an approved `gate@fingerprint` to every subsequent request, so the
+   * server's `verifyCheckpoint` middleware sees it on the action call itself.
+   */
+  setCheckpoint(gate: string, fingerprint: string): void {
+    this.checkpointHeader = `${gate}@${fingerprint}`;
+  }
+
   private headers(opts: RequestOptions | undefined, hasBody: boolean): Record<string, string> {
     const h: Record<string, string> = {
       accept: 'application/json',
@@ -129,6 +139,7 @@ export class ApiClient {
     if (hasBody) h['content-type'] = 'application/json';
     if (this.commandName) h['x-invokable-command'] = this.commandName;
     if (this.token && !opts?.anonymous) h['authorization'] = `Bearer ${this.token}`;
+    if (this.checkpointHeader) h['x-invokable-checkpoint'] = this.checkpointHeader;
     return { ...h, ...(opts?.headers ?? {}) };
   }
 

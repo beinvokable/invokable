@@ -41,15 +41,19 @@ export interface CheckpointChoice {
 }
 
 /**
- * Carried as the `data` of an OkEnvelope when a gate is hit.
+ * A pending approval gate — the third top-level status.
  *
- * NOTE: per spec 5.2 a pending checkpoint is `status: "ok"` on stdout while the
- * process exits 10. The exit code is the authoritative signal that the command
- * did NOT complete; `status` describes only whether the envelope itself is
- * well-formed. See docs/adr/0003-checkpoint-envelope.md.
+ * Spec 5.2 originally described this as `status: "ok"` with the payload under
+ * `data`, alongside exit 10. That made `status` and the exit code disagree: an
+ * agent reading `status` saw success while one reading the exit code saw a
+ * non-zero result, and harnesses that treat any non-zero exit as failure would
+ * turn an approval prompt into a spurious error. `status: "checkpoint"` makes
+ * the two agree. See docs/adr/0003-open-questions-from-spec.md.
+ *
+ * Fields are flat, matching ErrorEnvelope rather than nesting under `data`.
  */
-export interface CheckpointPayload {
-  kind: 'checkpoint';
+export interface CheckpointEnvelope {
+  status: 'checkpoint';
   schema: typeof CHECKPOINT_SCHEMA;
   gate: string;
   fingerprint: string;
@@ -65,7 +69,7 @@ export interface CheckpointPayload {
   };
 }
 
-export type Envelope<T = unknown> = OkEnvelope<T> | ErrorEnvelope;
+export type Envelope<T = unknown> = OkEnvelope<T> | ErrorEnvelope | CheckpointEnvelope;
 
 export function ok<T>(data: T): OkEnvelope<T> {
   return { status: 'ok', data };
@@ -87,16 +91,8 @@ export function errorEnvelope(input: {
   return env;
 }
 
-export function isCheckpointEnvelope(
-  env: Envelope,
-): env is OkEnvelope<CheckpointPayload> {
-  return (
-    env.status === 'ok' &&
-    typeof env.data === 'object' &&
-    env.data !== null &&
-    (env.data as CheckpointPayload).kind === 'checkpoint' &&
-    (env.data as CheckpointPayload).schema === CHECKPOINT_SCHEMA
-  );
+export function isCheckpointEnvelope(env: Envelope): env is CheckpointEnvelope {
+  return env.status === 'checkpoint' && env.schema === CHECKPOINT_SCHEMA;
 }
 
 /**

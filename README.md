@@ -7,16 +7,16 @@ installing instructions into the agent, machine auth, an output format the agent
 can parse without guessing, and a gate that stops the agent before it spends
 money. `invokable` is that layer, as a library.
 
-> **Status: early.** The runtime contract and machine auth are implemented and
-> tested. Checkpoints, the skill generator and the scaffolder are not built yet.
-> See [Roadmap](#roadmap).
+> **Status: early.** The runtime contract, machine auth and approval gates are
+> implemented and tested. The skill generator and the scaffolder are not built
+> yet. See [Roadmap](#roadmap).
 
 ## Packages
 
 | Package | Status | What it does |
 |---|---|---|
-| `@invokable/core` | 🟢 contract + auth done | Output envelope, exit codes, command schema, config store, device-code login |
-| `@invokable/server` | 🟢 device flow done | Device-flow endpoints + memory store (checkpoint verification pending) |
+| `@invokable/core` | 🟢 contract, auth, gates | Output envelope, exit codes, command schema, config store, device-code login, `checkpoint()` |
+| `@invokable/server` | 🟢 device flow + gates | Device-flow endpoints, checkpoint issuance and one-shot verification |
 | `@invokable/skills` | ⚪ not started | Generates `SKILL.md` / `AGENTS.md` / Cursor rules from the schema |
 | `create-invokable` | ⚪ not started | Project scaffolder |
 
@@ -78,6 +78,74 @@ agent decides what to do next from the number alone.
 
 **`remediation` on every error.** The literal next command to run, so the agent
 does not have to invent one.
+
+## Approval gates
+
+One call stops a command before it spends money:
+
+```js
+await checkpoint(ctx, {
+  gate: 'deploy_review',
+  title: 'deployment plan',
+  summary: { env: opts.env, replicas: plan.replicas },
+  subject: serviceId,
+  question: 'Deploy this plan to production?',
+  explain: 'Approving starts the deploy and bills 1 credit per minute.',
+  spend: { estimated: plan.credits, balance: plan.balance },
+  reject: `deployer deploy --env ${opts.env} --dry-run`,
+});
+```
+
+The agent gets a third status and exit 10 — not an error, and not a success:
+
+```console
+$ deployer deploy --env prod --json
+{"status":"checkpoint","schema":"invokable.checkpoint/v1","gate":"deploy_review",
+ "fingerprint":"GCI3HOREK4LY34J7","display":"…","spend":{"estimated":12,"balance":100},
+ "next":{"approve":"deployer deploy --env prod --json --approve deploy_review@GCI3HOREK4LY34J7",
+         "reject":"deployer deploy --env prod --dry-run"}}
+$ echo $?
+10
+```
+
+`display` is a pre-rendered panel, so every agent shows the user the same thing
+rather than paraphrasing what they are about to pay for:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ DEPLOYMENT PLAN                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│ {                                                                │
+│   "env": "prod",                                                 │
+│   "replicas": 3,                                                 │
+│   "image": "api:2.4.1"                                           │
+│ }                                                                │
+│                                                                  │
+│ Cost: 12 credits                                                 │
+│ Balance after: 88 credits                                        │
+│                                                                  │
+│ Deploy this plan to production?                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+At a real terminal it prompts instead. `next.approve` is the original invocation
+with the approval appended, so it runs as given.
+
+**The fingerprint is issued by the server, never computed locally.** It is bound
+to (gate, subject, summary), expires after 24h, and is consumed exactly once — by
+the action it authorises, via the `verifyCheckpoint` middleware. So a replayed
+approval fails, and an approval whose plan changed underneath fails:
+
+```console
+$ deployer deploy --env prod --json --approve deploy_review@GCI3HOREK4LY34J7
+{"status":"error","code":"checkpoint_stale","message":"The plan changed since this approval was issued."}
+$ echo $?
+12
+```
+
+`--yes` auto-approves and says so on stderr, and the server still records the
+approval. `--max-spend` overrides it: an estimate above the cap falls back to the
+gate rather than proceeding.
 
 ## Auth, for free
 
@@ -159,9 +227,9 @@ Slices, in dependency order. Each one ships working and tested.
 - [x] **2b — `@invokable/server`.** The device-flow endpoints and a memory store,
       with hashed tokens and single-use device codes. Verified by driving the
       real client against the real server over a socket.
-- [ ] **3 — Checkpoints.** `checkpoint()`, server-issued HMAC fingerprints,
-      one-shot verification, ASCII panel. Blocked on
-      [ADR 0003 §1](docs/adr/0003-open-questions-from-spec.md).
+- [x] **3 — Checkpoints.** `checkpoint()`, server-issued HMAC fingerprints,
+      one-shot consumption bound to the action, secret rotation, ASCII panel,
+      interactive prompt.
 - [ ] **4 — Skills.** `SKILL.md` generator + `.claude/skills` and `AGENTS.md`
       installers.
 - [ ] **5 — Scaffolder + conformance.** `create-invokable`, `invokable-test`.

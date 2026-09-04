@@ -1,13 +1,29 @@
 # ADR 0003 — Open questions the spec leaves unresolved
 
-**Status:** proposed — needs a product/engineering decision before the
-checkpoint milestone · **Date:** 2026-09-04
+**Status:** items 1 and 3 **decided 2026-09-04**; items 2 and 4 are standing
+notes · **Date:** 2026-09-04
 
 Implementing §5.1–§5.8 surfaced four issues that are not settled by the document.
 None of them block the runtime layer already built; all of them block
 `checkpoint()`.
 
-## 1. Where is the checkpoint secret? (blocking)
+## 1. Where is the checkpoint secret? — DECIDED: developer's API
+
+**Decision: hosted is auth-only in Phase 1.** Checkpoint fingerprints are issued
+and verified by the tool developer's own API, using `@invokable/server` with the
+secret in their environment. The hosted service provides identity — device flow,
+token store, revoke — and nothing else.
+
+Implemented as `CheckpointVerifier` + `checkpointRoutes()` + `verifyCheckpoint()`
+in `@invokable/server`. A tool developer mounts all three in their own app; the
+secret never leaves their infrastructure.
+
+This keeps the hosted product the size it was pitched at. Hosted checkpoints
+would mean either a network hop to a third party inside every verification, or
+proxying the developer's API outright — a materially larger service than "Clerk
+for agent tools", and a Phase 2 decision if it happens at all.
+
+The original problem, retained for context:
 
 §5.8 has the client `POST /checkpoints` to obtain an HMAC fingerprint, and §5.5
 mounts `verifyCheckpoint({ secret })` as middleware on the *tool developer's*
@@ -40,13 +56,27 @@ What the server-issued HMAC *does* buy is real and worth keeping: **freshness**
 (an approval cannot outlive the state it described) and **one-shot use** (an
 approval cannot be replayed). Both are properties the sha256 approach lacks.
 
-**This should be stated honestly in the README.** The security boundary in Phase
-1 is the human at the terminal plus the server-side audit trail — not containment
-of a hostile agent. Claiming otherwise invites a category of trust the design
-does not support. `requireSpendLimit` (implemented) lets a tool force
-`--max-spend` alongside `--yes`, which is the closest thing to an actual cap.
+**This is stated in the README and in the `@invokable/server` README.** The
+security boundary in Phase 1 is the human at the terminal plus the server-side
+audit trail — not containment of a hostile agent. Claiming otherwise invites a
+category of trust the design does not support.
 
-## 3. `status: "ok"` with exit 10 is incoherent for a pending checkpoint
+What is implemented and does hold: an approval is bound to (gate, subject,
+summary), expires, and is consumed exactly once by the action it authorises —
+so a stale or replayed approval is detected. `--max-spend` overrides `--yes`,
+and `requireSpendLimit` lets a tool refuse `--yes` without a cap.
+
+## 3. `status: "ok"` with exit 10 — DECIDED: a third status
+
+**Decision: `status: "checkpoint"` is a third top-level envelope value**, added
+before any adoption could make it expensive. `status` and the exit code now
+agree: a pending gate is `status: "checkpoint"` with exit 10, and no agent can
+read it as success by looking at only one of the two.
+
+The payload is flat, matching `ErrorEnvelope`, rather than nested under `data`.
+
+This is a deliberate deviation from spec 5.2, which described the pending
+checkpoint as `status: "ok"`. The original problem, retained for context:
 
 §5.2 shows a pending checkpoint as `{"status":"ok","data":{"kind":"checkpoint"…}}`
 while the process exits 10. An agent keying on `status` sees success; an agent

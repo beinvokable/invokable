@@ -16,3 +16,23 @@ export {
   generateDeviceCode,
   safeEqual,
 } from './tokens.js';
+
+export { checkpointRoutes, verifyCheckpoint, staleResponse } from './checkpoint-routes.js';
+export type { CheckpointRoutesOptions, VerifyCheckpointOptions } from './checkpoint-routes.js';
+
+export {
+  CheckpointVerifier,
+  computeFingerprint,
+  hashSummary,
+  memoryCheckpointStore,
+  parseCheckpointHeader,
+} from './checkpoints.js';
+export type {
+  CheckpointRecord,
+  CheckpointStore,
+  CheckpointVerifierOptions,
+  CheckpointFailure,
+  VerifyResult,
+} from './checkpoints.js';
+
+export { stableStringify } from './stable-json.js';

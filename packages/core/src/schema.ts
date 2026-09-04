@@ -43,6 +43,19 @@ export interface CommandContext {
   io: import('./io.js').Io;
   /** Raw positional arguments after the command name. */
   positionals: readonly string[];
+  /** The full argv this invocation was given, used to rebuild approve commands. */
+  argv: readonly string[];
+  /**
+   * Client used by `checkpoint()` to issue and verify fingerprints. Undefined
+   * when the tool declares no `api`, in which case gates cannot be used.
+   */
+  checkpointClient: import('./http.js').ApiClient | undefined;
+  /**
+   * Records an approved `gate@fingerprint` so that subsequent requests carry
+   * the `X-Invokable-Checkpoint` header and the server middleware can consume
+   * the approval atomically with the action it authorises.
+   */
+  attachCheckpoint: (gate: string, fingerprint: string) => void;
 }
 
 export interface CommandRunArgs<O extends OptionsSpec> {
