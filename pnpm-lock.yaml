@@ -36,7 +36,7 @@ importers:
   packages/conformance:
     dependencies:
       '@invokable/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
   packages/core: {}
@@ -46,13 +46,13 @@ importers:
   packages/server:
     devDependencies:
       '@invokable/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
   packages/skills:
     dependencies:
       '@invokable/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
 
 packages:

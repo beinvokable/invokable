@@ -1,10 +1,12 @@
 {
   "name": "@invokable/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Agent-native CLI runtime: output envelope, exit codes, command schema.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,7 +15,10 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo"
@@ -23,5 +28,7 @@
     "url": "git+https://github.com/beinvokable/invokable.git",
     "directory": "packages/core"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }

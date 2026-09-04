@@ -1,6 +1,6 @@
 {
   "name": "@invokable/server",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Self-hostable device-code auth endpoints for invokable tools.",
   "license": "MIT",
   "type": "module",
@@ -20,7 +20,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -35,6 +36,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "@invokable/core": "workspace:*"
+    "@invokable/core": "workspace:^"
   }
 }

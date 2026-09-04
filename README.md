@@ -327,6 +327,11 @@ hosted auth deployment, which are deployment steps rather than code.
 Design docs: [`docs/spec-v0.1.md`](docs/spec-v0.1.md) (original spec) and
 [`docs/adr/`](docs/adr/).
 
+## Releasing
+
+All five packages share one version and publish together from a git tag. See
+[docs/releasing.md](docs/releasing.md).
+
 ## License
 
 MIT

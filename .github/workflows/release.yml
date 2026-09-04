@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Pack and validate without publishing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  # Required for npm provenance, which links each published tarball to the
+  # exact commit and workflow run that produced it.
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # Writes an .npmrc that reads NODE_AUTH_TOKEN at publish time, so the
+          # token never appears in a command line or a committed file.
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag must match the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./packages/core/package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version $pkg in packages/core."
+            echo "Run: pnpm version:set $tag"
+            exit 1
+          fi
+
+      - name: Every package carries the same version
+        run: node scripts/check-versions.mjs
+
+      - run: pnpm build
+      - run: pnpm test
+
+      - name: The example tool honours its own contract
+        run: node packages/conformance/bin/invokable-test.mjs node examples/demo-tool/bin/demo-tool.mjs
+
+      - name: Pack and inspect
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tarballs
+          pnpm -r --filter './packages/*' exec pnpm pack --pack-destination /tmp/tarballs
+          ls -la /tmp/tarballs
+
+          # `npm publish` would leave `workspace:^` in the published manifest and
+          # every install would fail. Prove pnpm rewrote it before going further.
+          for t in /tmp/tarballs/*.tgz; do
+            if tar -xzOf "$t" package/package.json | grep -q '"workspace:'; then
+              echo "$t still contains a workspace: dependency range"
+              exit 1
+            fi
+          done
+          echo "No workspace: ranges in any tarball."
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
+        run: pnpm publish -r --access public --provenance --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

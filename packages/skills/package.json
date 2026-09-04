@@ -1,20 +1,37 @@
 {
   "name": "@invokable/skills",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Generates portable Agent Skills (SKILL.md) and agent instruction files from an invokable tool schema.",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
-  "scripts": { "build": "tsc -b", "clean": "rm -rf dist *.tsbuildinfo" },
-  "dependencies": { "@invokable/core": "workspace:*" },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@invokable/core": "workspace:^"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/beinvokable/invokable.git",
     "directory": "packages/skills"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }
