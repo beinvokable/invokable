@@ -74,7 +74,7 @@ Also not handled here, and yours to add:
   add your framework's CSRF protection.
 - **Rate limiting on `/device/start`.** Nothing stops an attacker minting device
   codes in bulk.
-- **Durable storage.** `memoryStore()` loses every token on restart. It is for
-  development and tests. A Postgres store is on the roadmap.
+- **Durable storage** — but `postgresAuthStore()` and `postgresCheckpointStore()`
+  are provided; see below. `memoryStore()` is for development only.
 - **Audit logging.** The store records who approved what and when; surfacing it
   is the host application's job.

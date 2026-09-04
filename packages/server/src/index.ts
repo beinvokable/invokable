@@ -36,3 +36,14 @@ export type {
 } from './checkpoints.js';
 
 export { stableStringify } from './stable-json.js';
+
+export {
+  postgresAuthStore,
+  postgresCheckpointStore,
+  purgeExpired,
+  createSchema,
+} from './postgres-store.js';
+export type { PostgresStoreOptions, PurgeResult } from './postgres-store.js';
+
+export { SCHEMA_SQL, SCHEMA_STATEMENTS } from './sql.js';
+export type { SqlExecutor } from './sql.js';

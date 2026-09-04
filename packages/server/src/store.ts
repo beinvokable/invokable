@@ -79,7 +79,11 @@ export function memoryStore(): AuthStore & { _devices: Map<string, DeviceRecord>
     },
     async revokeToken(tokenHash, at) {
       const existing = tokens.get(tokenHash);
-      if (existing) tokens.set(tokenHash, { ...existing, revokedAt: at });
+      // First revocation wins: that is the moment the token stopped working,
+      // and overwriting it would misreport when access actually ended.
+      if (existing && existing.revokedAt === undefined) {
+        tokens.set(tokenHash, { ...existing, revokedAt: at });
+      }
     },
   };
 }

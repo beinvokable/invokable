@@ -36,6 +36,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@invokable/core": "workspace:^"
+    "@invokable/core": "workspace:^",
+    "@electric-sql/pglite": "^0.5.8"
   }
 }

@@ -39,7 +39,7 @@ login, the approval gate, the agent instructions — comes from the packages.
 | Package | | What it does |
 |---|---|---|
 | [`@invokable/core`](https://www.npmjs.com/package/@invokable/core) | [src](packages/core) · [docs](packages/core/README.md) | The runtime: output envelope, exit codes, command schema, config store, `login`, `checkpoint()` |
-| [`@invokable/server`](https://www.npmjs.com/package/@invokable/server) | [src](packages/server) · [docs](packages/server/README.md) | Device-flow auth endpoints, checkpoint issuing and one-shot verification |
+| [`@invokable/server`](https://www.npmjs.com/package/@invokable/server) | [src](packages/server) · [docs](packages/server/README.md) | Device-flow auth endpoints, checkpoint issuing and one-shot verification, Postgres stores |
 | [`@invokable/skills`](https://www.npmjs.com/package/@invokable/skills) | [src](packages/skills) · [docs](packages/skills/README.md) | Generates a portable `SKILL.md` and installs it for every major agent |
 | [`@invokable/conformance`](https://www.npmjs.com/package/@invokable/conformance) | [src](packages/conformance) · [docs](packages/conformance/README.md) | `invokable-test` — checks a CLI honours the contract |
 | [`create-invokable`](https://www.npmjs.com/package/create-invokable) | [src](packages/create-invokable) · [docs](packages/create-invokable/README.md) | Scaffolds a project |
