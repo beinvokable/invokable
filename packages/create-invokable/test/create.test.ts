@@ -69,6 +69,16 @@ describe('scaffolded files', () => {
     expect(source).toContain('MY_DEPLOY_TOOL_API');
   });
 
+  it('lets every endpoint and the token store be redirected by environment', () => {
+    // A second environment (a local server, CI) must not overwrite the token
+    // for the first: they share one config.json unless CONFIG_DIR moves.
+    const tool = fileMap({ ...base, name: 'my-tool' }).get('src/tool.ts')!;
+
+    expect(tool).toContain('process.env.MY_TOOL_API');
+    expect(tool).toContain('process.env.MY_TOOL_AUTH');
+    expect(tool).toContain("process.env.MY_TOOL_CONFIG_DIR ?? '~/.my-tool'");
+  });
+
   it('wires both contract checks into CI', () => {
     const ci = fileMap(base).get('.github/workflows/ci.yml')!;
     expect(ci).toContain('invokable-test');

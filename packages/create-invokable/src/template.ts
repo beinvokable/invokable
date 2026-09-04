@@ -133,7 +133,9 @@ export default defineTool({
     baseUrl: process.env.${envPrefix}_API ?? '${baseUrl}',
     authUrl: process.env.${envPrefix}_AUTH ?? '${authUrl}',
   },
-  configDir: '~/.${spec.name}',
+  // Overridable so a second environment — a local server, CI — gets its own
+  // token instead of overwriting the one you are already signed in with.
+  configDir: process.env.${envPrefix}_CONFIG_DIR ?? '~/.${spec.name}',
 ${spec.spends ? '\n  // Refuse `--yes` on spending commands unless `--max-spend` is also given.\n  requireSpendLimit: true,\n' : ''}
   commands: {
     // Installs agent instructions into this project. login/logout/whoami/doctor
@@ -360,8 +362,15 @@ Express.
 Auth points at \`${HOSTED_AUTH_URL}\`. Override for local development:
 
 \`\`\`bash
-${envPrefix}_AUTH=http://127.0.0.1:8787 node bin/${spec.name}.mjs login
+${envPrefix}_AUTH=http://127.0.0.1:8787 \\
+${envPrefix}_API=http://127.0.0.1:8787 \\
+${envPrefix}_CONFIG_DIR=~/.${spec.name}-local \\
+  node bin/${spec.name}.mjs login
 \`\`\`
+
+Set \`${envPrefix}_CONFIG_DIR\` whenever you point at a second environment.
+Without it the local token is written over the one for
+\`${HOSTED_AUTH_URL}\` — same file, and you are signed out of the real thing.
 `
 }
 ## The contract
