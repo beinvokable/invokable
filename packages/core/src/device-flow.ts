@@ -80,8 +80,11 @@ export async function deviceLogin(options: DeviceFlowOptions): Promise<DeviceTok
 
   hooks?.onPrompt?.(start);
 
-  let intervalMs = Math.max(1, start.interval || 5) * 1000;
-  const deadline = now() + Math.max(1, start.expiresIn || 900) * 1000;
+  // `??` rather than `||`: a server that advertises `interval: 0` is saying
+  // "poll as fast as allowed", not "I forgot to send one". The 1s floor still
+  // applies, so a zero cannot turn into a busy loop.
+  let intervalMs = Math.max(1, start.interval ?? 5) * 1000;
+  const deadline = now() + Math.max(1, start.expiresIn ?? 900) * 1000;
   let attempt = 0;
 
   while (now() < deadline) {

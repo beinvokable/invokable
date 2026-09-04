@@ -40,3 +40,30 @@ jobs:
           code=$?
           set -e
           test "$code" -eq 5 || { echo "expected exit 5, got $code"; exit 1; }
+
+      - name: Smoke-test self-hosted auth end to end
+        run: |
+          set -euo pipefail
+          node examples/self-host-auth/server.mjs & srv=$!
+          trap 'kill $srv 2>/dev/null || true' EXIT
+          sleep 2
+
+          export DEMO_TOOL_API=http://127.0.0.1:8787
+          export DEMO_TOOL_CONFIG_DIR="$RUNNER_TEMP/demo-cfg"
+
+          node examples/demo-tool/bin/demo-tool.mjs login --json \
+            >"$RUNNER_TEMP/login.out" 2>"$RUNNER_TEMP/login.err" & login=$!
+          sleep 2
+          code=$(grep -oE '[A-Z0-9]{4}-[A-Z0-9]{4}' "$RUNNER_TEMP/login.err" | head -1)
+          test -n "$code" || { echo "no user code printed"; cat "$RUNNER_TEMP/login.err"; exit 1; }
+          curl -sf -X POST http://127.0.0.1:8787/device/approve \
+            -H 'content-type: application/json' -d "{\"userCode\":\"$code\"}" >/dev/null
+          wait $login
+
+          jq -e '.data.signedIn == true' "$RUNNER_TEMP/login.out" >/dev/null
+          node examples/demo-tool/bin/demo-tool.mjs whoami --json 2>/dev/null \
+            | jq -e '.data.subject == "demo@example.com"' >/dev/null
+
+          # The stored credential must not be world-readable.
+          perms=$(stat -c '%a' "$DEMO_TOOL_CONFIG_DIR/config.json")
+          test "$perms" = "600" || { echo "config.json is $perms, expected 600"; exit 1; }

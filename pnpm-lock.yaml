@@ -24,7 +24,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
+  examples/self-host-auth:
+    dependencies:
+      '@invokable/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+
   packages/core: {}
+
+  packages/server:
+    devDependencies:
+      '@invokable/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 

@@ -16,7 +16,7 @@ money. `invokable` is that layer, as a library.
 | Package | Status | What it does |
 |---|---|---|
 | `@invokable/core` | 🟢 contract + auth done | Output envelope, exit codes, command schema, config store, device-code login |
-| `@invokable/server` | ⚪ not started | Device-flow endpoints, checkpoint verification (self-host) |
+| `@invokable/server` | 🟢 device flow done | Device-flow endpoints + memory store (checkpoint verification pending) |
 | `@invokable/skills` | ⚪ not started | Generates `SKILL.md` / `AGENTS.md` / Cursor rules from the schema |
 | `create-invokable` | ⚪ not started | Project scaffolder |
 
@@ -126,13 +126,18 @@ node examples/demo-tool/bin/demo-tool.mjs greet --name Ido --json
 node examples/demo-tool/bin/demo-tool.mjs find-project nope --json; echo "exit $?"
 ```
 
-To exercise the full login flow against a local server, point the example at one:
+To exercise the full login flow, run the self-hosted auth server and point the
+example tool at it:
 
 ```bash
-DEMO_TOOL_API=http://127.0.0.1:8080 \
+node examples/self-host-auth/server.mjs &
+
+DEMO_TOOL_API=http://127.0.0.1:8787 \
 DEMO_TOOL_CONFIG_DIR=/tmp/demo-cfg \
-  node examples/demo-tool/bin/demo-tool.mjs login --json
+  node examples/demo-tool/bin/demo-tool.mjs login
 ```
+
+It prints a code and a URL; open the URL and click Approve.
 
 ## What this does not do
 
@@ -151,9 +156,9 @@ Slices, in dependency order. Each one ships working and tested.
 - [x] **2a — Config + auth client.** Token store (0700/0600, atomic), device-code
       client with `slow_down` backoff, `login` / `logout` / `whoami` / `doctor`,
       HTTP client mapping status codes onto the exit contract, agent detection.
-- [ ] **2b — `@invokable/server`.** The five device-flow endpoints and a memory
-      store, made to pass the same wire tests the client is already verified
-      against (`packages/core/test/auth-server.ts`).
+- [x] **2b — `@invokable/server`.** The device-flow endpoints and a memory store,
+      with hashed tokens and single-use device codes. Verified by driving the
+      real client against the real server over a socket.
 - [ ] **3 — Checkpoints.** `checkpoint()`, server-issued HMAC fingerprints,
       one-shot verification, ASCII panel. Blocked on
       [ADR 0003 §1](docs/adr/0003-open-questions-from-spec.md).
