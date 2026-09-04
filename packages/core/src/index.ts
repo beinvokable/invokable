@@ -52,5 +52,32 @@ export type { ParsedArgv, GlobalOptions } from './parse-args.js';
 export { buildManifest, renderToolHelp, renderCommandHelp } from './help.js';
 export type { ToolManifest } from './help.js';
 
+export { ConfigStore, resolveToken, tokenEnvVar, expandHome } from './config.js';
+export type { StoredConfig, ConfigPatch, TokenSource, ResolvedToken } from './config.js';
+
+export { detectAgent, isInteractive } from './agent.js';
+export type { AgentId } from './agent.js';
+
+export { ApiClient, unconfiguredClient } from './http.js';
+export type { ApiClientOptions, RequestOptions, FetchLike } from './http.js';
+
+export { deviceLogin, whoami, revokeToken } from './device-flow.js';
+export type {
+  DeviceStartResponse,
+  DeviceTokenResponse,
+  DeviceFlowOptions,
+  DeviceFlowHooks,
+  WhoamiResponse,
+} from './device-flow.js';
+
+export {
+  BUILTIN_COMMANDS,
+  resolveCommands,
+  loginCommand,
+  logoutCommand,
+  whoamiCommand,
+  doctorCommand,
+} from './builtins.js';
+
 export { runTool, cli } from './run.js';
 export type { RunOptions, RunResult } from './run.js';

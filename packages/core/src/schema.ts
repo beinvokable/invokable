@@ -23,6 +23,12 @@ export type OptionsSpec = Record<string, OptionSpec>;
 export type ResolvedOptions = Record<string, string | number | boolean | undefined>;
 
 export interface CommandContext {
+  /** The tool definition, for building remediation strings and reading config. */
+  tool: ToolSpec;
+  /** On-disk config + token store, rooted at the tool's configDir. */
+  config: import('./config.js').ConfigStore;
+  /** How the active token was found, or 'none'. */
+  tokenSource: import('./config.js').TokenSource;
   /** Global `--json` flag. Commands should not format output themselves. */
   json: boolean;
   /** Global `--yes`: pre-approve gates in this run. See spec 5.1. */
@@ -41,6 +47,8 @@ export interface CommandContext {
 
 export interface CommandRunArgs<O extends OptionsSpec> {
   opts: ResolvedOptionsFor<O>;
+  /** HTTP client bound to `api.baseUrl`, with auth and telemetry headers set. */
+  client: import('./http.js').ApiClient;
   ctx: CommandContext;
 }
 

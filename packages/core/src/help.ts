@@ -1,4 +1,5 @@
 import { EXIT, EXIT_DESCRIPTION, type ExitName } from './exit-codes.js';
+import { resolveCommands } from './builtins.js';
 import type { CommandSpec, DefinedTool, OptionSpec, OptionsSpec } from './schema.js';
 
 /** Machine-readable description of the tool, emitted by `--help --json`. */
@@ -21,7 +22,7 @@ export function buildManifest(tool: DefinedTool): ToolManifest {
     name: tool.name,
     version: tool.version,
     description: tool.description,
-    commands: Object.entries(tool.commands).map(([name, cmd]) => ({
+    commands: Object.entries(resolveCommands(tool)).map(([name, cmd]) => ({
       name,
       description: cmd.description,
       spends: cmd.spends ?? false,
@@ -63,8 +64,9 @@ export function renderToolHelp(tool: DefinedTool): string {
   lines.push(`Usage: ${tool.name} <command> [options]`);
   lines.push('');
   lines.push('Commands:');
-  const width = Math.max(...Object.keys(tool.commands).map((c) => c.length), 8);
-  for (const [name, cmd] of Object.entries(tool.commands)) {
+  const all = resolveCommands(tool);
+  const width = Math.max(...Object.keys(all).map((c) => c.length), 8);
+  for (const [name, cmd] of Object.entries(all)) {
     const marker = cmd.spends ? '  $' : '';
     lines.push(`  ${name.padEnd(width)}  ${cmd.description}${marker}`);
   }

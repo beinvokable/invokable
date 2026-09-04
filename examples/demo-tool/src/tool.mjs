@@ -10,6 +10,14 @@ export default defineTool({
   version: '0.1.0',
   description: 'Example invokable tool used to smoke-test the runtime.',
 
+  // Overridable so the example can be pointed at a local auth server while
+  // developing. A real tool would hard-code its own URLs here.
+  api: {
+    baseUrl: process.env.DEMO_TOOL_API ?? 'https://api.demo-tool.invalid',
+    authUrl: process.env.DEMO_TOOL_API ?? 'https://auth.demo-tool.invalid',
+  },
+  configDir: process.env.DEMO_TOOL_CONFIG_DIR ?? '~/.demo-tool',
+
   commands: {
     greet: command({
       description: 'Greet someone by name.',

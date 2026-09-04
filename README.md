@@ -7,15 +7,15 @@ installing instructions into the agent, machine auth, an output format the agent
 can parse without guessing, and a gate that stops the agent before it spends
 money. `invokable` is that layer, as a library.
 
-> **Status: early.** The runtime contract (`@invokable/core`) is implemented and
-> tested. Auth, checkpoints, the skill generator and the scaffolder are not built
-> yet. See [Roadmap](#roadmap).
+> **Status: early.** The runtime contract and machine auth are implemented and
+> tested. Checkpoints, the skill generator and the scaffolder are not built yet.
+> See [Roadmap](#roadmap).
 
 ## Packages
 
 | Package | Status | What it does |
 |---|---|---|
-| `@invokable/core` | 🟢 contract layer done | Output envelope, exit codes, command schema, arg parsing |
+| `@invokable/core` | 🟢 contract + auth done | Output envelope, exit codes, command schema, config store, device-code login |
 | `@invokable/server` | ⚪ not started | Device-flow endpoints, checkpoint verification (self-host) |
 | `@invokable/skills` | ⚪ not started | Generates `SKILL.md` / `AGENTS.md` / Cursor rules from the schema |
 | `create-invokable` | ⚪ not started | Project scaffolder |
@@ -79,6 +79,42 @@ agent decides what to do next from the number alone.
 **`remediation` on every error.** The literal next command to run, so the agent
 does not have to invent one.
 
+## Auth, for free
+
+Every tool gets `login`, `logout`, `whoami` and `doctor` without writing them.
+`login` runs the device-code flow, then stores the token in `~/.<tool>/config.json`
+— directory `0700`, file `0600`, written atomically so a crash cannot truncate a
+credential the user would have to re-issue.
+
+```console
+$ demo-tool login
+  To finish signing in to demo-tool, open:
+    https://auth.example.com/device?code=WXYZ-1234
+  and confirm this code:  WXYZ-1234
+  Waiting for approval…
+
+$ demo-tool whoami --json
+{"status":"ok","data":{"subject":"ido@example.com","orgId":"org_acme"}}
+
+$ demo-tool logout --json && demo-tool whoami --json; echo "exit $?"
+{"status":"error","code":"auth","message":"Not signed in.","remediation":"demo-tool login"}
+exit 3
+```
+
+Token precedence is `--token` > `DEMO_TOOL_TOKEN` > config file. Passing `--token`
+warns on stderr, because it is visible to other users via `ps`.
+
+`doctor` separates the failures that look alike from the outside:
+
+```console
+$ demo-tool doctor --json | jq '{api:.data.api.reachable, auth:.data.auth.ok, cfg:.data.config.source}'
+{"api": true, "auth": false, "cfg": "none"}
+```
+
+A server that answers `401` is *reachable* — only a network or timeout failure
+marks it unreachable. Telling those apart is most of what "it doesn't work" turns
+out to be.
+
 ## Try it
 
 ```bash
@@ -88,6 +124,14 @@ pnpm test
 
 node examples/demo-tool/bin/demo-tool.mjs greet --name Ido --json
 node examples/demo-tool/bin/demo-tool.mjs find-project nope --json; echo "exit $?"
+```
+
+To exercise the full login flow against a local server, point the example at one:
+
+```bash
+DEMO_TOOL_API=http://127.0.0.1:8080 \
+DEMO_TOOL_CONFIG_DIR=/tmp/demo-cfg \
+  node examples/demo-tool/bin/demo-tool.mjs login --json
 ```
 
 ## What this does not do
@@ -104,8 +148,12 @@ security boundary is the human at the terminal. See
 Slices, in dependency order. Each one ships working and tested.
 
 - [x] **1 — Contract.** Envelope, exit codes, schema, parser, stdout guard, help.
-- [ ] **2 — Config + auth.** Token store (0600), device-code client, `login` /
-      `logout` / `whoami` / `doctor`, `@invokable/server` with a memory store.
+- [x] **2a — Config + auth client.** Token store (0700/0600, atomic), device-code
+      client with `slow_down` backoff, `login` / `logout` / `whoami` / `doctor`,
+      HTTP client mapping status codes onto the exit contract, agent detection.
+- [ ] **2b — `@invokable/server`.** The five device-flow endpoints and a memory
+      store, made to pass the same wire tests the client is already verified
+      against (`packages/core/test/auth-server.ts`).
 - [ ] **3 — Checkpoints.** `checkpoint()`, server-issued HMAC fingerprints,
       one-shot verification, ASCII panel. Blocked on
       [ADR 0003 §1](docs/adr/0003-open-questions-from-spec.md).

@@ -4,6 +4,9 @@ import { InvokableError, isInvokableError, usageError } from './errors.js';
 import { Io, type Streams } from './io.js';
 import { parseArgv, resolveOptions } from './parse-args.js';
 import { buildManifest, renderCommandHelp, renderToolHelp } from './help.js';
+import { ConfigStore, resolveToken } from './config.js';
+import { ApiClient, unconfiguredClient } from './http.js';
+import { resolveCommands } from './builtins.js';
 import type { CommandContext, DefinedTool, ResolvedOptions } from './schema.js';
 
 export interface RunOptions {
@@ -50,11 +53,12 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
       );
     }
 
+    const commands = resolveCommands(tool);
     const commandName = parsed.command;
 
     if (commandName === undefined || globals.help) {
-      if (commandName !== undefined && tool.commands[commandName]) {
-        const cmd = tool.commands[commandName]!;
+      if (commandName !== undefined && commands[commandName]) {
+        const cmd = commands[commandName]!;
         return finish(io, ok(buildManifest(tool)), EXIT.ok, () =>
           io.note(renderCommandHelp(tool, commandName, cmd)),
         );
@@ -68,9 +72,9 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
       return finish(io, ok(buildManifest(tool)), EXIT.ok, () => io.note(renderToolHelp(tool)));
     }
 
-    const cmd = tool.commands[commandName];
+    const cmd = commands[commandName];
     if (!cmd) {
-      const known = Object.keys(tool.commands).join(', ');
+      const known = Object.keys(commands).sort().join(', ');
       throw usageError(
         `Unknown command "${commandName}". Known commands: ${known}.`,
         `${tool.name} --help`,
@@ -86,7 +90,30 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
 
     const opts: ResolvedOptions = resolveOptions(cmd.options, parsed.raw, commandName);
 
+    const config = new ConfigStore(tool.configDir ?? `~/.${tool.name}`);
+    const env = options.env ?? process.env;
+    const { token, source: tokenSource } = resolveToken({
+      toolName: tool.name,
+      flagToken: globals.token,
+      env,
+      config: config.read(),
+    });
+
+    const client = tool.api?.baseUrl
+      ? new ApiClient({
+          baseUrl: tool.api.baseUrl,
+          token,
+          toolName: tool.name,
+          toolVersion: tool.version,
+          commandName,
+          env,
+        })
+      : unconfiguredClient(tool.name);
+
     const ctx: CommandContext = {
+      tool,
+      config,
+      tokenSource,
       json: globals.json,
       yes: globals.yes,
       maxSpend: globals.maxSpend,
@@ -97,7 +124,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await io.guardStdout(async () => cmd.run({ opts: opts as any, ctx }));
+    const data = await io.guardStdout(async () => cmd.run({ opts: opts as any, client, ctx }));
 
     return finish(io, ok(data ?? null), EXIT.ok, () => {
       if (data !== undefined && data !== null) io.note(formatHuman(data));
