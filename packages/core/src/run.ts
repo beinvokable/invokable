@@ -8,6 +8,7 @@ import { ConfigStore, resolveToken } from './config.js';
 import { ApiClient, unconfiguredClient } from './http.js';
 import { resolveCommands } from './builtins.js';
 import { CheckpointPending } from './checkpoint.js';
+import { rebuildCommand } from './rebuild-command.js';
 import type { CommandContext, DefinedTool, ResolvedOptions } from './schema.js';
 
 export interface RunOptions {
@@ -44,7 +45,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
 
     if (globals.version) {
       return finish(io, ok({ name: tool.name, version: tool.version }), EXIT.ok, () =>
-        io.note(tool.version),
+        io.result(tool.version),
       );
     }
 
@@ -61,7 +62,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
       if (commandName !== undefined && commands[commandName]) {
         const cmd = commands[commandName]!;
         return finish(io, ok(buildManifest(tool)), EXIT.ok, () =>
-          io.note(renderCommandHelp(tool, commandName, cmd)),
+          io.result(renderCommandHelp(tool, commandName, cmd)),
         );
       }
       if (commandName === undefined && !globals.help) {
@@ -70,7 +71,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
           error: usageError('No command given.', `${tool.name} --help`),
         });
       }
-      return finish(io, ok(buildManifest(tool)), EXIT.ok, () => io.note(renderToolHelp(tool)));
+      return finish(io, ok(buildManifest(tool)), EXIT.ok, () => io.result(renderToolHelp(tool)));
     }
 
     const cmd = commands[commandName];
@@ -85,7 +86,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
     if (cmd.spends && globals.yes && tool.requireSpendLimit && globals.maxSpend === undefined) {
       throw usageError(
         `"${commandName}" can spend money, and this tool requires --max-spend alongside --yes.`,
-        `${tool.name} ${commandName} --yes --max-spend <number>`,
+        rebuildCommand(tool.name, argv, { add: ['--max-spend', '<number>'] }),
       );
     }
 
@@ -135,7 +136,7 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
     return finish(io, ok(data ?? null), EXIT.ok, () => {
       if (data === undefined || data === null) return;
       const rendered = cmd.formatHuman ? cmd.formatHuman(data) : formatHuman(data);
-      if (rendered !== null) io.note(rendered);
+      if (rendered !== null) io.result(rendered);
     });
   } catch (e) {
     return failure(io, e);

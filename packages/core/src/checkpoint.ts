@@ -3,6 +3,7 @@ import { CHECKPOINT_SCHEMA, type CheckpointChoice, type CheckpointEnvelope, type
 import { InvokableError } from './errors.js';
 import { summaryHash } from './canonical.js';
 import { isInteractive } from './agent.js';
+import { rebuildCommand } from './rebuild-command.js';
 import type { CommandContext } from './schema.js';
 
 export interface CheckpointOptions {
@@ -146,35 +147,6 @@ export function renderCheckpointPanel(input: {
   return lines.join('\n');
 }
 
-/** Quotes an argument only when a shell would otherwise mangle it. */
-function shellQuote(arg: string): string {
-  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * Rebuilds the invocation that produced this gate, with the approval added.
- *
- * Using just `<tool> <command>` drops the original options, so the command
- * handed to the agent fails with a usage error the moment any option is
- * required — the approve command has to actually run.
- */
-function buildApproveCommand(ctx: CommandContext, gate: string, fingerprint: string): string {
-  const args: string[] = [];
-  const argv = ctx.argv;
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]!;
-    // Drop any previous --approve: this run supersedes it.
-    if (token === '--approve') {
-      i++;
-      continue;
-    }
-    if (token.startsWith('--approve=')) continue;
-    args.push(token);
-  }
-  args.push('--approve', `${gate}@${fingerprint}`);
-  return [ctx.tool.name, ...args.map(shellQuote)].join(' ');
-}
-
 function parseApprovals(approvals: readonly string[]): Map<string, string> {
   const map = new Map<string, string>();
   for (const raw of approvals) {
@@ -256,7 +228,11 @@ export async function checkpoint(
   const approveCommand =
     options.approveCommand !== undefined
       ? `${options.approveCommand} --approve ${gate}@${fingerprint}`
-      : buildApproveCommand(ctx, gate, fingerprint);
+      : rebuildCommand(ctx.tool.name, ctx.argv, {
+          // A previous --approve is superseded by this one.
+          drop: ['--approve'],
+          add: ['--approve', `${gate}@${fingerprint}`],
+        });
 
   // --- --yes: auto-approve, but still on the server's record ---------------
   const overSpendCap =

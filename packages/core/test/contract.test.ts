@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defineTool, command } from '../src/schema.js';
 import { EXIT } from '../src/exit-codes.js';
 import { InvokableError } from '../src/errors.js';
+import { rebuildCommand } from '../src/rebuild-command.js';
 import { invoke } from './helpers.js';
 
 const tool = defineTool({
@@ -81,11 +82,11 @@ describe('stdout is exactly one JSON document', () => {
     expect(r.stderr).toContain('raw bytes on stdout');
   });
 
-  it('writes nothing to stdout without --json', async () => {
+  it('writes the result to stdout without --json, so redirection works', async () => {
     const r = await invoke(tool, ['greet', '--name', 'ada']);
-    expect(r.stdout).toBe('');
-    expect(r.stderr).toContain('hello ada');
+    expect(r.stdout).toContain('hello ada');
   });
+
 });
 
 describe('error envelopes and exit codes', () => {
@@ -188,5 +189,57 @@ describe('built-ins', () => {
     const r = await invoke(tool, ['greet', '--name', 'ada', '--token', 'secret', '--json']);
     expect(r.stderr).toContain('ps');
     expect(r.stdout).not.toContain('secret');
+  });
+});
+
+describe('commands handed back to the agent actually run', () => {
+  const spender = defineTool({
+    name: 'spendy',
+    version: '1.0.0',
+    api: { baseUrl: 'http://127.0.0.1:1' },
+    requireSpendLimit: true,
+    commands: {
+      deploy: command({
+        description: 'Deploy.',
+        options: { env: { type: 'string', required: true, choices: ['staging', 'prod'] } },
+        spends: true,
+        run: () => ({ deployed: true }),
+      }),
+    },
+  });
+
+  it('the --max-spend remediation reproduces the original invocation', async () => {
+    // Building it from the tool and command name alone would drop `--env prod`,
+    // so the command we tell the agent to run would fail with a usage error.
+    const r = await invoke(spender, ['deploy', '--env', 'prod', '--yes', '--json']);
+
+    expect(r.exitCode).toBe(EXIT.usage);
+    const remediation = (r.json() as { remediation: string }).remediation;
+    expect(remediation).toBe('spendy deploy --env prod --yes --json --max-spend <number>');
+  });
+});
+
+describe('rebuildCommand', () => {
+  it('keeps the original arguments', () => {
+    expect(rebuildCommand('t', ['deploy', '--env', 'prod'])).toBe('t deploy --env prod');
+  });
+
+  it('drops a flag and its value', () => {
+    expect(
+      rebuildCommand('t', ['deploy', '--approve', 'g@fp', '--env', 'prod'], {
+        drop: ['--approve'],
+      }),
+    ).toBe('t deploy --env prod');
+  });
+
+  it('drops the --flag=value form too', () => {
+    expect(
+      rebuildCommand('t', ['deploy', '--approve=g@fp', '--env', 'prod'], { drop: ['--approve'] }),
+    ).toBe('t deploy --env prod');
+  });
+
+  it('quotes arguments a shell would mangle', () => {
+    expect(rebuildCommand('t', ['say', 'hello world'])).toBe("t say 'hello world'");
+    expect(rebuildCommand('t', ['say', "it's"])).toContain("\\'");
   });
 });

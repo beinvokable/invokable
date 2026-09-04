@@ -1,0 +1,20 @@
+{
+  "name": "create-invokable",
+  "version": "0.0.0",
+  "description": "Scaffold an agent-native CLI.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "create-invokable": "./bin/create-invokable.mjs" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "bin"],
+  "scripts": { "build": "tsc -b", "clean": "rm -rf dist *.tsbuildinfo" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beinvokable/invokable.git",
+    "directory": "packages/create-invokable"
+  },
+  "publishConfig": { "access": "public" }
+}

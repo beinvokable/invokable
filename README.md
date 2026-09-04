@@ -7,9 +7,9 @@ installing instructions into the agent, machine auth, an output format the agent
 can parse without guessing, and a gate that stops the agent before it spends
 money. `invokable` is that layer, as a library.
 
-> **Status: early.** The runtime contract, machine auth, approval gates and the
-> agent-instruction generator are implemented and tested. The scaffolder is not
-> built yet. See [Roadmap](#roadmap).
+> **Status: early but complete through Phase 1's P0 list.** Contract, auth,
+> approval gates, the agent-instruction generator, the scaffolder and the
+> conformance checker are implemented and tested. See [Roadmap](#roadmap).
 
 ## Packages
 
@@ -18,7 +18,8 @@ money. `invokable` is that layer, as a library.
 | `@invokable/core` | 🟢 contract, auth, gates | Output envelope, exit codes, command schema, config store, device-code login, `checkpoint()` |
 | `@invokable/server` | 🟢 device flow + gates | Device-flow endpoints, checkpoint issuance and one-shot verification |
 | `@invokable/skills` | 🟢 generator done | Generates a portable `SKILL.md` and installs it for every major agent |
-| `create-invokable` | ⚪ not started | Project scaffolder |
+| `create-invokable` | 🟢 scaffolder done | Project scaffolder |
+| `@invokable/conformance` | 🟢 checker done | `invokable-test`: verifies a CLI honours the contract |
 
 The hosted auth service lives in a separate private repository; see
 [ADR 0001](docs/adr/0001-repository-topology.md) for why.
@@ -221,6 +222,51 @@ schema change nobody regenerated:
 - run: npx demo-tool init --check
 ```
 
+## Start a tool
+
+```console
+$ npx create-invokable my-deployer
+? Auth server?
+  1) hosted  (default)
+  2) self-host
+? First command? (deploy)
+? Does it spend money or need approval? [Y/n]
+
+Created ./my-deployer
+```
+
+You get a buildable TypeScript project with a working `login`, the four
+built-ins, an approval gate on the first command if it spends, generated agent
+instructions, and a CI workflow that runs both contract checks.
+
+## Check the contract holds
+
+```console
+$ npx invokable-test node bin/my-deployer.mjs
+
+  ✓ `--version --json` returns a valid ok envelope
+  ✓ `--help --json` returns a command manifest
+  ✓ An unknown command exits 2 with an error envelope
+  ✓ A bare invocation does not exit 0
+  ✓ `doctor --json` reports auth and config state
+  ✓ Every exit code is reserved or in 30-99
+  ✓ `--json` puts exactly one JSON document on stdout
+  ✓ No credential-shaped strings on stdout
+  ✓ Errors carry a `remediation`
+
+  9 passed
+```
+
+It works on any CLI, not just one built with this SDK — the contract is the
+product, the library is one way to satisfy it. Failures explain why an agent
+cares and print a command to reproduce.
+
+**It only runs commands that cannot change anything**: `--help`, `--version`,
+`doctor`, and deliberately invalid invocations. Executing commands from the
+manifest could deploy something or spend money, and tools where that matters are
+exactly the ones this suite exists for. Nominate extra safe commands with
+`--safe-command`.
+
 ## Try it
 
 ```bash
@@ -271,7 +317,12 @@ Slices, in dependency order. Each one ships working and tested.
 - [x] **4 — Skills.** Portable `SKILL.md` generator, installers for Claude Code,
       Codex, Cursor, Gemini CLI, Copilot and `AGENTS.md`, custom-block
       preservation, `init --check` for CI.
-- [ ] **5 — Scaffolder + conformance.** `create-invokable`, `invokable-test`.
+- [x] **5 — Scaffolder + conformance.** `create-invokable` with hosted and
+      self-host templates, `invokable-test` with failure fixtures proving each
+      check fires.
+
+Phase 1's P0 list from the spec is complete apart from publishing to npm and the
+hosted auth deployment, which are deployment steps rather than code.
 
 Design docs: [`docs/spec-v0.1.md`](docs/spec-v0.1.md) (original spec) and
 [`docs/adr/`](docs/adr/).

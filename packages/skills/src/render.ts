@@ -57,7 +57,7 @@ export function buildDescription(opts: RenderOptions): string {
 
   const { manifest } = opts;
   const verbs = manifest.commands
-    .filter((c) => !['login', 'logout', 'whoami', 'doctor'].includes(c.name))
+    .filter((c) => !['login', 'logout', 'whoami', 'doctor', 'init', 'update'].includes(c.name))
     .map((c) => c.name)
     .slice(0, 8);
 

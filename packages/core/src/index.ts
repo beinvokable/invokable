@@ -84,5 +84,8 @@ export type { CheckpointOptions, CheckpointResult } from './checkpoint.js';
 
 export { stableStringify, summaryHash } from './canonical.js';
 
+export { rebuildCommand, shellQuote } from './rebuild-command.js';
+export type { RebuildOptions } from './rebuild-command.js';
+
 export { runTool, cli } from './run.js';
 export type { RunOptions, RunResult } from './run.js';

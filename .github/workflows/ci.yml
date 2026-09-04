@@ -41,6 +41,9 @@ jobs:
           set -e
           test "$code" -eq 5 || { echo "expected exit 5, got $code"; exit 1; }
 
+      - name: The example tool honours its own contract
+        run: node packages/conformance/bin/invokable-test.mjs node examples/demo-tool/bin/demo-tool.mjs
+
       - name: Generated agent instructions are up to date
         run: |
           set -euo pipefail

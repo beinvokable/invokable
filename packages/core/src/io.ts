@@ -40,7 +40,22 @@ export class Io {
     };
   }
 
-  /** Human-facing progress. Never parsed by an agent; always stderr. */
+  /**
+   * The command's result, in human mode. Goes to stdout so that redirection and
+   * pipes work the way they do for every other CLI: `mytool show > out.txt`
+   * must not produce an empty file.
+   *
+   * In `--json` mode the result travels in the envelope instead, and this must
+   * not be called — stdout is reserved for that single document.
+   */
+  result(message: string): void {
+    if (this.json) {
+      throw new Error('Io.result() must not be used in --json mode; emit the envelope instead.');
+    }
+    this.rawStdoutWrite(message.endsWith('\n') ? message : message + '\n');
+  }
+
+  /** Human-facing progress, prompts and warnings. Never a result; always stderr. */
   note(message: string): void {
     this.streams.stderr.write(message.endsWith('\n') ? message : message + '\n');
   }

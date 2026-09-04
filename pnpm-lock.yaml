@@ -33,7 +33,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
 
+  packages/conformance:
+    dependencies:
+      '@invokable/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/core: {}
+
+  packages/create-invokable: {}
 
   packages/server:
     devDependencies:

@@ -1,0 +1,21 @@
+{
+  "name": "@invokable/conformance",
+  "version": "0.0.0",
+  "description": "Checks that a CLI honours the invokable agent contract.",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "invokable-test": "./bin/invokable-test.mjs" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "bin"],
+  "scripts": { "build": "tsc -b", "clean": "rm -rf dist *.tsbuildinfo" },
+  "dependencies": { "@invokable/core": "workspace:*" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beinvokable/invokable.git",
+    "directory": "packages/conformance"
+  },
+  "publishConfig": { "access": "public" }
+}
