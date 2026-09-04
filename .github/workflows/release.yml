@@ -76,6 +76,8 @@ jobs:
 
       - name: Publish
         if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
-        run: pnpm publish -r --access public --provenance --no-git-checks
+        # Filtered explicitly rather than relying on `private: true` to keep the
+        # examples out: the filter is visible here, the flag is not.
+        run: pnpm publish -r --filter './packages/*' --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
