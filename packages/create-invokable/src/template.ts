@@ -128,6 +128,138 @@ ${spec.spends ? gated : plain}
 `;
 }
 
+/**
+ * A runnable server for `--auth self-host`.
+ *
+ * Telling someone to "start a server that mounts @invokable/server" and handing
+ * them nothing is where the self-host path used to break: the CLI half was
+ * scaffolded and the other half was a sentence. This is the other half.
+ */
+function serverSource(spec: ScaffoldSpec): string {
+  return `#!/usr/bin/env node
+/**
+ * Development auth + checkpoint server for ${spec.name}.
+ *
+ *   npm run server        # this file, on :8787
+ *   npm run build && node bin/${spec.name}.mjs login
+ *
+ * Three things are served: auth and checkpoints come from @invokable/server,
+ * and the ${spec.command} endpoints are yours to replace with the real thing.
+ */
+import { createServer } from 'node:http';
+import {
+  CheckpointVerifier,
+  checkpointRoutes,
+  invokableAuth,
+  memoryCheckpointStore,
+  memoryStore,
+  verifyCheckpoint,
+} from '@invokable/server';
+import { nodeListener } from '@invokable/server/node';
+
+const PORT = Number(process.env.PORT ?? 8787);
+
+// Signs approval fingerprints. In production this comes from your secret
+// manager and never leaves your infrastructure.
+const CHECKPOINT_SECRET = process.env.CHECKPOINT_SECRET ?? 'dev-only-change-me-0123456789abcdef';
+
+const verifier = new CheckpointVerifier({
+  secret: CHECKPOINT_SECRET,
+  // Development only — everything is lost on restart, and on serverless there
+  // is no shared memory at all. Swap for postgresCheckpointStore() before
+  // anyone depends on this. See the @invokable/server README.
+  store: memoryCheckpointStore(),
+});
+
+const auth = invokableAuth({
+  store: memoryStore(),
+  tokenPrefix: '${spec.name.replace(/-/g, '').slice(0, 4)}',
+  tokenTtl: null,
+
+  // THE HOOK YOU MUST REPLACE.
+  //
+  // Runs on the approval page, in the browser. It answers "who is signed in
+  // right now?" from your own session — a cookie, a JWT, whatever you already
+  // have. Returning null means signed out, and nothing can be approved.
+  requireSession: (_request) => ({
+    subject: 'dev@example.com',
+    displayName: 'Local Developer',
+  }),
+
+  // Optional: your own branded approval page. If you replace the default, KEEP
+  // the part naming the tool, version and machine, and the warning to approve
+  // only a login you just started — that display is the only defence against
+  // someone sending a user a code and asking them to approve it.
+  // approvePage: ({ device, user }) => renderMyPage(device, user),
+});
+
+const checkpoints = checkpointRoutes({ verifier });
+${
+  spec.spends
+    ? `
+// Guards only the endpoint that spends. Guarding the planning call too would
+// mean the CLI could never fetch a plan to show the user, and the gate could
+// never open.
+const requireApproval = verifyCheckpoint({
+  verifier,
+  requiresApproval: (request) => new URL(request.url).pathname === '/v1/${spec.command}',
+  // Must return the same \`subject\` the CLI passes to checkpoint(). It binds an
+  // approval to one target, so an approval for A cannot act on B.
+  subjectFor: () => 'svc-1',
+});
+`
+    : ''
+}
+const state = { runs: [], balance: 100 };
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+createServer(
+  nodeListener(async (request) => {
+    const { pathname } = new URL(request.url);
+${
+  spec.spends
+    ? `
+    // Planning changes nothing, so it is not gated. It produces the summary the
+    // user is about to be asked to approve.
+    if (pathname === '/v1/${spec.command}/plan' && request.method === 'POST') {
+      const { env } = await request.json().catch(() => ({}));
+      return json({ id: 'svc-1', env, credits: 12, balance: state.balance, summary: { env } });
+    }
+
+    if (pathname === '/v1/${spec.command}' && request.method === 'POST') {
+      // Returns a 409 the CLI turns into exit 12 when the approval is missing,
+      // stale, expired or already used. Returns null when it is good.
+      const rejected = await requireApproval(request);
+      if (rejected) return rejected;
+
+      const id = \`run_\${state.runs.length + 1}\`;
+      state.runs.push(id);
+      state.balance -= 12;
+      return json({ ok: true, id, balanceAfter: state.balance });
+    }
+`
+    : `
+    if (pathname.startsWith('/v1/${spec.command}/')) {
+      return json({ ok: true, name: decodeURIComponent(pathname.split('/').pop() ?? '') });
+    }
+`
+}
+    // Each returns null for paths it does not own, so they compose with yours.
+    return (await auth(request)) ?? (await checkpoints(request));
+  }),
+).listen(PORT, () => {
+  console.error(\`${spec.name} dev server on http://127.0.0.1:\${PORT}\`);
+  console.error('');
+  console.error('  auth        POST /device/start   GET /device   POST /device/token');
+  console.error('  checkpoints POST /checkpoints    POST /checkpoints/verify');
+  console.error('  yours       ${spec.spends ? `POST /v1/${spec.command}/plan   POST /v1/${spec.command}` : `GET /v1/${spec.command}/:name`}');
+  console.error('');
+  console.error('  Next:  npm run build && node bin/${spec.name}.mjs login');
+});
+`;
+}
+
 function readme(spec: ScaffoldSpec): string {
   const envPrefix = spec.name.toUpperCase().replace(/-/g, '_');
   return `# ${spec.name}
@@ -154,14 +286,48 @@ node bin/${spec.name}.mjs doctor --json
 ${
   spec.auth === 'self-host'
     ? `
-### Run the auth server
+### Run the server
 
-This project is configured for self-hosted auth. Start a server that mounts
-\`@invokable/server\` on \`${apiUrls(spec).authUrl}\`, then:
+This project is self-hosted, so it ships its own server — \`server.mjs\` in this
+directory. It serves three things:
+
+| | |
+|---|---|
+| Auth | the device-code endpoints \`login\` talks to (from \`@invokable/server\`) |
+| Checkpoints | issuing and verifying approval fingerprints (from \`@invokable/server\`) |
+| \`/v1/${spec.command}\` | **yours** — replace with the real thing |
 
 \`\`\`bash
-node bin/${spec.name}.mjs login
+npm run server                       # terminal 1, on :8787
+npm run build
+node bin/${spec.name}.mjs login      # terminal 2
 \`\`\`
+
+\`login\` prints a code and a URL. Open the URL, approve, and the CLI finishes on
+its own.
+
+### Before this is production
+
+\`server.mjs\` is wired for a laptop. Three things must change, and each is
+marked in the file:
+
+- **\`requireSession\`** returns a fixed user. Replace it with your own session
+  lookup — a cookie, a JWT, whatever you already have. Returning \`null\` means
+  signed out, and nothing can be approved.
+- **\`memoryStore()\` and \`memoryCheckpointStore()\`** lose everything on
+  restart, and on serverless there is no shared memory at all. Swap for
+  \`postgresAuthStore()\` and \`postgresCheckpointStore()\`; see the
+  [\`@invokable/server\` README](https://www.npmjs.com/package/@invokable/server).
+- **\`CHECKPOINT_SECRET\`** is a literal. Move it to your secret manager.
+
+Two things the SDK deliberately leaves to you: CSRF protection on
+\`/device/approve\` if you serve a cookie-authenticated form, and rate limiting
+on \`/device/start\`.
+
+Mounting in an app you already have? The handlers are
+\`(Request) => Promise<Response | null>\` and return \`null\` for paths they do not
+own, so they compose with your routes. \`@invokable/server/node\` adapts them to
+Express.
 `
     : `
 ### Sign in
@@ -235,20 +401,23 @@ export function scaffold(spec: ScaffoldSpec): ScaffoldFile[] {
       build: 'tsc -p tsconfig.json',
       dev: 'tsc -p tsconfig.json --watch',
       test: 'invokable-test node bin/' + spec.name + '.mjs',
+      ...(spec.auth === 'self-host' ? { server: 'node server.mjs' } : {}),
       prepublishOnly: 'npm run build',
     },
     dependencies: {
-      '@invokable/core': '^0.1.0',
-      '@invokable/skills': '^0.1.0',
+      '@invokable/core': '^0.2.0',
+      '@invokable/skills': '^0.2.0',
+      // Only self-host projects ship a server; hosted tools talk to one.
+      ...(spec.auth === 'self-host' ? { '@invokable/server': '^0.2.0' } : {}),
     },
     devDependencies: {
-      '@invokable/conformance': '^0.1.0',
+      '@invokable/conformance': '^0.2.0',
       '@types/node': '^22.0.0',
       typescript: '^5.9.0',
     },
   };
 
-  return [
+  const files: ScaffoldFile[] = [
     { path: 'package.json', content: JSON.stringify(pkg, null, 2) + '\n' },
     {
       path: 'tsconfig.json',
@@ -317,4 +486,10 @@ jobs:
 `,
     },
   ];
+
+  if (spec.auth === 'self-host') {
+    files.push({ path: 'server.mjs', content: serverSource(spec), executable: true });
+  }
+
+  return files;
 }

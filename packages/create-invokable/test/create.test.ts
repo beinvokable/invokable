@@ -205,3 +205,65 @@ describe('the CLI', () => {
     expect(source).toContain('127.0.0.1:8787');
   });
 });
+
+describe('the self-host scaffold ships a working server', () => {
+  // Telling someone to "start a server that mounts @invokable/server" and
+  // handing them nothing is where the self-host path used to break: the CLI
+  // half was scaffolded and the other half was a sentence.
+  it('includes server.mjs only for self-host', () => {
+    const selfHost = scaffold({ ...base, auth: 'self-host' }).map((f) => f.path);
+    const hosted = scaffold({ ...base, auth: 'hosted' }).map((f) => f.path);
+
+    expect(selfHost).toContain('server.mjs');
+    expect(hosted).not.toContain('server.mjs');
+  });
+
+  it('depends on @invokable/server only when it ships one', () => {
+    const deps = (spec: ScaffoldSpec) =>
+      JSON.parse(fileMap(spec).get('package.json')!).dependencies;
+
+    expect(deps({ ...base, auth: 'self-host' })).toHaveProperty('@invokable/server');
+    expect(deps({ ...base, auth: 'hosted' })).not.toHaveProperty('@invokable/server');
+  });
+
+  it('adds an `npm run server` script for self-host', () => {
+    const scripts = (spec: ScaffoldSpec) =>
+      JSON.parse(fileMap(spec).get('package.json')!).scripts;
+
+    expect(scripts({ ...base, auth: 'self-host' }).server).toBe('node server.mjs');
+    expect(scripts({ ...base, auth: 'hosted' })).not.toHaveProperty('server');
+  });
+
+  it('guards the spending endpoint but not the planning one', () => {
+    // Guarding the plan call too would mean the CLI could never fetch a plan to
+    // show the user, and the gate could never open.
+    const server = fileMap({ ...base, auth: 'self-host', spends: true }).get('server.mjs')!;
+    expect(server).toContain("requiresApproval: (request) => new URL(request.url).pathname === '/v1/deploy'");
+    expect(server).toContain('/v1/deploy/plan');
+  });
+
+  it('omits the checkpoint wiring when the command does not spend', () => {
+    const server = fileMap({ ...base, auth: 'self-host', spends: false }).get('server.mjs')!;
+    expect(server).not.toContain('verifyCheckpoint(');
+  });
+
+  it('marks every hook that must be replaced before production', () => {
+    const server = fileMap({ ...base, auth: 'self-host' }).get('server.mjs')!;
+    expect(server).toContain('THE HOOK YOU MUST REPLACE');
+    expect(server).toContain('Development only');
+    expect(server).toContain('CHECKPOINT_SECRET');
+  });
+
+  it('tells the reader in the README what to change', () => {
+    const readme = fileMap({ ...base, auth: 'self-host' }).get('README.md')!;
+    expect(readme).toContain('npm run server');
+    expect(readme).toContain('Before this is production');
+    expect(readme).toContain('requireSession');
+    expect(readme).toContain('postgresAuthStore');
+  });
+
+  it('ships the server executable', () => {
+    const file = scaffold({ ...base, auth: 'self-host' }).find((f) => f.path === 'server.mjs');
+    expect(file?.executable).toBe(true);
+  });
+});
