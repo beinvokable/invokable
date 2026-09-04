@@ -113,20 +113,46 @@ export async function createMain(options: CreateOptions): Promise<number> {
 
     stderr(`\nCreated ${target}\n\n`);
     for (const file of files) stderr(`  ${file.path}\n`);
-    stderr(
-      [
+    // Spelled out because `${name} login` is the first thing people try, and
+    // it is not a command until the package is linked. Getting
+    // "command not found" straight after a successful scaffold reads as the
+    // tool being broken.
+    const lines = [
+      '',
+      'Next:',
+      `  cd ${name}`,
+      '  npm install',
+      '  npm run build',
+      '',
+      `Run it with the full path — \`${name}\` is not on your PATH yet:`,
+      `  node bin/${name}.mjs --help`,
+      `  node bin/${name}.mjs doctor --json`,
+      '',
+      `To type \`${name}\` instead, link it once:`,
+      '  npm link',
+      `  ${name} --help`,
+      '',
+    ];
+
+    if (auth === 'self-host') {
+      lines.push(
+        'This project is self-hosted, so it ships its own server.',
+        'Start it in another terminal before you sign in:',
+        '  npm run server',
+        `  node bin/${name}.mjs login`,
         '',
-        'Next:',
-        `  cd ${name}`,
-        '  npm install',
-        '  npm run build',
-        `  node bin/${name}.mjs --help`,
+      );
+    } else {
+      lines.push(
+        'Sign in (opens a browser):',
+        `  node bin/${name}.mjs login`,
         '',
-        'Then check the contract holds:',
-        `  npx invokable-test node bin/${name}.mjs`,
-        '',
-      ].join('\n'),
-    );
+      );
+    }
+
+    lines.push('Then check the contract holds:', `  npx invokable-test node bin/${name}.mjs`, '');
+
+    stderr(lines.join('\n'));
     return 0;
   } finally {
     prompter.close();
