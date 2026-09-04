@@ -133,7 +133,9 @@ export async function runTool(tool: DefinedTool, options: RunOptions = {}): Prom
     const data = await io.guardStdout(async () => cmd.run({ opts: opts as any, client, ctx }));
 
     return finish(io, ok(data ?? null), EXIT.ok, () => {
-      if (data !== undefined && data !== null) io.note(formatHuman(data));
+      if (data === undefined || data === null) return;
+      const rendered = cmd.formatHuman ? cmd.formatHuman(data) : formatHuman(data);
+      if (rendered !== null) io.note(rendered);
     });
   } catch (e) {
     return failure(io, e);

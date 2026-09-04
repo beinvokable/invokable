@@ -7,9 +7,9 @@ installing instructions into the agent, machine auth, an output format the agent
 can parse without guessing, and a gate that stops the agent before it spends
 money. `invokable` is that layer, as a library.
 
-> **Status: early.** The runtime contract, machine auth and approval gates are
-> implemented and tested. The skill generator and the scaffolder are not built
-> yet. See [Roadmap](#roadmap).
+> **Status: early.** The runtime contract, machine auth, approval gates and the
+> agent-instruction generator are implemented and tested. The scaffolder is not
+> built yet. See [Roadmap](#roadmap).
 
 ## Packages
 
@@ -17,7 +17,7 @@ money. `invokable` is that layer, as a library.
 |---|---|---|
 | `@invokable/core` | 🟢 contract, auth, gates | Output envelope, exit codes, command schema, config store, device-code login, `checkpoint()` |
 | `@invokable/server` | 🟢 device flow + gates | Device-flow endpoints, checkpoint issuance and one-shot verification |
-| `@invokable/skills` | ⚪ not started | Generates `SKILL.md` / `AGENTS.md` / Cursor rules from the schema |
+| `@invokable/skills` | 🟢 generator done | Generates a portable `SKILL.md` and installs it for every major agent |
 | `create-invokable` | ⚪ not started | Project scaffolder |
 
 The hosted auth service lives in a separate private repository; see
@@ -183,6 +183,44 @@ A server that answers `401` is *reachable* — only a network or timeout failure
 marks it unreachable. Telling those apart is most of what "it doesn't work" turns
 out to be.
 
+## Agent instructions, generated
+
+`init` turns the tool schema into instructions and installs them for every agent
+the user might be running:
+
+```console
+$ demo-tool init
+created: .claude/skills/demo-tool/SKILL.md
+created: .codex/skills/demo-tool/SKILL.md
+created: .cursor/skills/demo-tool/SKILL.md
+created: .gemini/skills/demo-tool/SKILL.md
+created: .agents/skills/demo-tool/SKILL.md
+updated: AGENTS.md
+created: CLAUDE.md
+created: .github/copilot-instructions.md
+created: .cursor/rules/demo-tool.mdc
+```
+
+The `SKILL.md` written to those five directories is **byte-identical**. That is
+the [Agent Skills standard](https://agentskills.io) doing its job, and it is why
+the generator emits only the six frontmatter fields the spec allows rather than
+the wider set Claude Code alone accepts — anything else fails to upload to
+claude.ai or the Skills API. See
+[ADR 0004](docs/adr/0004-agent-instruction-formats.md).
+
+`AGENTS.md`, Copilot instructions and Cursor rules get a short section between
+`<!-- invokable:begin -->` markers; the rest of those files is never touched.
+`CLAUDE.md` gets `@AGENTS.md`, because Claude Code reads `CLAUDE.md` and not
+`AGENTS.md`, and duplicating the section would load it twice every session.
+
+Anything you write inside `<!-- invokable:custom -->` survives regeneration.
+`init --check` exits **30** when the generated files are stale, so CI catches a
+schema change nobody regenerated:
+
+```yaml
+- run: npx demo-tool init --check
+```
+
 ## Try it
 
 ```bash
@@ -230,8 +268,9 @@ Slices, in dependency order. Each one ships working and tested.
 - [x] **3 — Checkpoints.** `checkpoint()`, server-issued HMAC fingerprints,
       one-shot consumption bound to the action, secret rotation, ASCII panel,
       interactive prompt.
-- [ ] **4 — Skills.** `SKILL.md` generator + `.claude/skills` and `AGENTS.md`
-      installers.
+- [x] **4 — Skills.** Portable `SKILL.md` generator, installers for Claude Code,
+      Codex, Cursor, Gemini CLI, Copilot and `AGENTS.md`, custom-block
+      preservation, `init --check` for CI.
 - [ ] **5 — Scaffolder + conformance.** `create-invokable`, `invokable-test`.
 
 Design docs: [`docs/spec-v0.1.md`](docs/spec-v0.1.md) (original spec) and

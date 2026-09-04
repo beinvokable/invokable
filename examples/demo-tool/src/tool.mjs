@@ -1,4 +1,5 @@
 import { checkpoint, command, defineTool, InvokableError } from '@invokable/core';
+import { initCommand } from '@invokable/skills';
 
 /**
  * The smallest tool that exercises the whole contract: a success path, a
@@ -19,6 +20,8 @@ export default defineTool({
   configDir: process.env.DEMO_TOOL_CONFIG_DIR ?? '~/.demo-tool',
 
   commands: {
+    init: initCommand(),
+
     greet: command({
       description: 'Greet someone by name.',
       options: {

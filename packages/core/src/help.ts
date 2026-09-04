@@ -1,6 +1,6 @@
 import { EXIT, EXIT_DESCRIPTION, type ExitName } from './exit-codes.js';
 import { resolveCommands } from './builtins.js';
-import type { CommandSpec, DefinedTool, OptionSpec, OptionsSpec } from './schema.js';
+import type { CommandSpec, DefinedTool, OptionSpec, OptionsSpec, ToolSpec } from './schema.js';
 
 /** Machine-readable description of the tool, emitted by `--help --json`. */
 export interface ToolManifest {
@@ -13,11 +13,13 @@ export interface ToolManifest {
     spends: boolean;
     positionals: readonly string[];
     options: Array<{ name: string } & OptionSpec>;
+    /** Tool-defined exit codes for this command, as `code -> description`. */
+    exitCodes?: Readonly<Record<number, string>>;
   }>;
   exitCodes: Array<{ code: number; name: string; description: string }>;
 }
 
-export function buildManifest(tool: DefinedTool): ToolManifest {
+export function buildManifest(tool: ToolSpec): ToolManifest {
   return {
     name: tool.name,
     version: tool.version,
@@ -31,6 +33,7 @@ export function buildManifest(tool: DefinedTool): ToolManifest {
         name: optName,
         ...spec,
       })),
+      ...(cmd.exitCodes !== undefined ? { exitCodes: cmd.exitCodes } : {}),
     })),
     exitCodes: (Object.keys(EXIT) as ExitName[]).map((name) => ({
       code: EXIT[name],
@@ -56,7 +59,7 @@ function formatOption(name: string, spec: OptionSpec): string {
   return `  ${(flag + value).padEnd(30)} ${spec.description ?? ''}${suffix}`.trimEnd();
 }
 
-export function renderToolHelp(tool: DefinedTool): string {
+export function renderToolHelp(tool: ToolSpec): string {
   const lines: string[] = [];
   lines.push(`${tool.name} ${tool.version}`);
   if (tool.description) lines.push(tool.description);
@@ -85,7 +88,7 @@ export function renderToolHelp(tool: DefinedTool): string {
 }
 
 export function renderCommandHelp(
-  tool: DefinedTool,
+  tool: ToolSpec,
   name: string,
   cmd: CommandSpec,
 ): string {

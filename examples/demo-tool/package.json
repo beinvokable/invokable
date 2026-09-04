@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": { "demo-tool": "./bin/demo-tool.mjs" },
+  "bin": {
+    "demo-tool": "./bin/demo-tool.mjs"
+  },
   "dependencies": {
-    "@invokable/core": "workspace:*"
+    "@invokable/core": "workspace:*",
+    "@invokable/skills": "workspace:*"
   }
 }

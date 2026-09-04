@@ -41,6 +41,24 @@ jobs:
           set -e
           test "$code" -eq 5 || { echo "expected exit 5, got $code"; exit 1; }
 
+      - name: Generated agent instructions are up to date
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/skills-check"
+          mkdir -p "$out"
+          node examples/demo-tool/bin/demo-tool.mjs init --dir "$out" >/dev/null 2>&1
+          # A second run must be a no-op; if it is not, generation is not deterministic.
+          node examples/demo-tool/bin/demo-tool.mjs init --dir "$out" --check >/dev/null 2>&1
+
+          # The same SKILL.md must reach every agent's directory, byte for byte.
+          hashes=$(md5sum \
+            "$out"/.claude/skills/demo-tool/SKILL.md \
+            "$out"/.codex/skills/demo-tool/SKILL.md \
+            "$out"/.cursor/skills/demo-tool/SKILL.md \
+            "$out"/.gemini/skills/demo-tool/SKILL.md \
+            "$out"/.agents/skills/demo-tool/SKILL.md | awk '{print $1}' | sort -u | wc -l)
+          test "$hashes" -eq 1 || { echo "SKILL.md differs between agent directories"; exit 1; }
+
       - name: Smoke-test self-hosted auth end to end
         run: |
           set -euo pipefail

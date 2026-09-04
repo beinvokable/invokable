@@ -105,6 +105,14 @@ export interface CommandSpec<O extends OptionsSpec = OptionsSpec> {
   spends?: boolean;
   /** Extra exit codes this command can produce, as `code -> description`. */
   exitCodes?: Readonly<Record<number, string>>;
+  /**
+   * Renders the result for a human when `--json` is absent. Return `null` when
+   * the command already wrote everything worth showing to stderr, so the
+   * runtime does not dump the raw result underneath it.
+   *
+   * Never affects `--json` output, which is fixed by the contract.
+   */
+  formatHuman?: (data: unknown) => string | null;
   run: (args: CommandRunArgs<O>) => Promise<unknown> | unknown;
 }
 
