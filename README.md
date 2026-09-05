@@ -45,7 +45,8 @@ login, the approval gate, the agent instructions — comes from the packages.
 | [`create-invokable`](https://www.npmjs.com/package/create-invokable) | [src](packages/create-invokable) · [docs](packages/create-invokable/README.md) | Scaffolds a project |
 
 Examples: [`examples/demo-tool`](examples/demo-tool) is a working CLI;
-[`examples/server`](examples/server) is a complete backend with a runnable
+[`examples/mcp`](examples/mcp) exposes the same CLI over the Model Context
+Protocol. [`examples/server`](examples/server) is a complete backend with a runnable
 walkthrough of the whole exchange.
 
 The hosted auth service lives in a separate private repository; see
@@ -209,6 +210,27 @@ $ echo $?
 approval. `--max-spend` overrides it: an estimate above the cap falls back to the
 gate rather than proceeding.
 
+The SDK renders the price and compares it to `--max-spend`; it does not know what
+a credit is worth or what the balance is. Your server decides both.
+[**docs/credits.md**](docs/credits.md) covers what that server has to get right —
+quoting a ceiling when the cost is not knowable in advance (an AI call billed on
+token usage), holds, idempotent capture keyed by the fingerprint, and what to do
+when the real cost overruns the approved one.
+
+## Talking to agents that are not in a terminal
+
+A skill covers agents that can run a shell. For hosts that cannot — or that want
+a curated tool surface — put an MCP server in front of the same binary.
+
+invokable does not ship one. [**docs/mcp.md**](docs/mcp.md) is how to write one,
+and [`examples/mcp`](examples/mcp) is a working implementation with a scripted
+host that drives it.
+
+The adapter is thin because the contract was built for it: the tool list comes
+from `--help --json`, the result is the envelope, and `status: "checkpoint"`
+becomes an MCP elicitation — so the **person** approves the spend, not the model.
+No per-command code, so adding a command to the CLI adds it to the MCP surface.
+
 ## Auth, for free
 
 Every tool gets `login`, `logout`, `whoami` and `doctor` without writing them.
@@ -363,6 +385,9 @@ Slices, in dependency order. Each one ships working and tested.
 
 Phase 1's P0 list from the spec is complete apart from publishing to npm and the
 hosted auth deployment, which are deployment steps rather than code.
+
+Guides: [`docs/credits.md`](docs/credits.md) (pricing, quotas and metering) and
+[`docs/mcp.md`](docs/mcp.md) (building an MCP server for a tool).
 
 Design docs: [`docs/spec-v0.1.md`](docs/spec-v0.1.md) (original spec) and
 [`docs/adr/`](docs/adr/).

@@ -45,6 +45,9 @@ jobs:
       - name: The example tool honours its own contract
         run: node packages/conformance/bin/invokable-test.mjs node examples/demo-tool/bin/demo-tool.mjs
 
+      - name: The MCP adapter exposes the CLI's real surface
+        run: node examples/mcp/ci-check.mjs
+
       - name: Generated agent instructions are up to date
         run: |
           set -euo pipefail
