@@ -1,14 +1,34 @@
 import { InvokableError, buildManifest, command } from '@invokable/core';
 import { installSkills } from './install.js';
+import type { BundledSkill, SkillSection } from './render.js';
 import { DEFAULT_TARGET_IDS } from './targets.js';
+
+/** What a tool can add to the generated instructions. See the README. */
+export interface InitCommandOptions {
+  /** Overrides the generated `description` frontmatter of the tool's skill. */
+  description?: string;
+  /** Extra trigger phrases folded into the generated description. */
+  triggers?: readonly string[];
+  /** Defaults to `Bash, Read`. */
+  allowedTools?: readonly string[];
+  license?: string;
+  /** Developer-written sections rendered into the tool's SKILL.md. */
+  sections?: readonly SkillSection[];
+  /** Skills shipped with the tool, installed as `<tool>-<name>` next to it. */
+  skills?: readonly BundledSkill[];
+}
 
 /**
  * The `init` built-in from spec 5.3, provided here rather than in core so that
  * the runtime does not depend on the generator. A tool opts in:
  *
  *   commands: { init: initCommand(), … }
+ *
+ * and may add its own knowledge:
+ *
+ *   commands: { init: initCommand({ sections: [...], skills: [...] }), … }
  */
-export function initCommand() {
+export function initCommand(options: InitCommandOptions = {}) {
   return command({
     description: 'Install agent instructions for this tool into the current project.',
     options: {
@@ -27,6 +47,12 @@ export function initCommand() {
     run: ({ opts, ctx }) => {
       const result = installSkills({
         manifest: buildManifest(ctx.tool),
+        ...(options.description !== undefined ? { description: options.description } : {}),
+        ...(options.triggers !== undefined ? { triggers: options.triggers } : {}),
+        ...(options.allowedTools !== undefined ? { allowedTools: options.allowedTools } : {}),
+        ...(options.license !== undefined ? { license: options.license } : {}),
+        ...(options.sections !== undefined ? { sections: options.sections } : {}),
+        ...(options.skills !== undefined ? { skills: options.skills } : {}),
         ...(opts.dir !== undefined ? { root: opts.dir } : {}),
         ...(opts.targets !== undefined
           ? { targets: opts.targets.split(',').map((s) => s.trim()).filter(Boolean) }

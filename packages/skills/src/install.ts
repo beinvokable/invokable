@@ -2,7 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import type { ToolManifest } from '@invokable/core';
 import { extractCustomBlocks, restoreCustomBlocks, upsertSection } from './markers.js';
-import { buildDescription, renderSkill, type RenderOptions } from './render.js';
+import {
+  buildDescription,
+  bundledSkillName,
+  renderBundledSkill,
+  renderSkill,
+  type RenderOptions,
+} from './render.js';
 import {
   DEFAULT_TARGET_IDS,
   renderClaudeMdPointer,
@@ -84,9 +90,11 @@ export function installSkills(options: InstallOptions): InstallResult {
   }
 
   const rendered = renderSkill(options);
+  const bundled = (options.skills ?? []).map((skill) => renderBundledSkill(options, skill));
   const manifest: ToolManifest = options.manifest;
   const description = buildDescription(options);
   const files: InstalledFile[] = [];
+  const issues = [...rendered.issues, ...bundled.flatMap((b) => b.issues)];
 
   // The canonical skill location, referenced by every section target so an
   // agent reading AGENTS.md knows where the detail lives.
@@ -94,24 +102,38 @@ export function installSkills(options: InstallOptions): InstallResult {
     targets.find((t) => t.kind === 'skill')?.path(manifest.name) ??
     `.claude/skills/${manifest.name}`;
 
+  // Bundled skills are described in the shared-file section too, so an agent
+  // that reads only AGENTS.md knows they exist and what each is for.
+  const related = (options.skills ?? []).map((skill) => ({
+    path: targets.find((t) => t.kind === 'skill')?.path(bundledSkillName(manifest.name, skill)) ??
+      `.claude/skills/${bundledSkillName(manifest.name, skill)}`,
+    description: skill.description,
+  }));
+
+  const installSkillDir = (dir: string, skillFiles: readonly { path: string; content: string }[]): void => {
+    for (const file of skillFiles) {
+      const absolute = join(dir, file.path);
+
+      let content = file.content;
+      let preserved = 0;
+      if (!options.force && existsSync(absolute)) {
+        const blocks = extractCustomBlocks(readFileSync(absolute, 'utf8'));
+        if (blocks.length) {
+          content = restoreCustomBlocks(content, blocks);
+          preserved = blocks.length;
+        }
+      }
+
+      const result = writeIfChanged(absolute, content, { check, root });
+      files.push(preserved ? { ...result, preservedBlocks: preserved } : result);
+    }
+  };
+
   for (const target of targets) {
     if (target.kind === 'skill') {
-      const dir = join(root, target.path(manifest.name));
-      for (const file of rendered.files) {
-        const absolute = join(dir, file.path);
-
-        let content = file.content;
-        let preserved = 0;
-        if (!options.force && existsSync(absolute)) {
-          const blocks = extractCustomBlocks(readFileSync(absolute, 'utf8'));
-          if (blocks.length) {
-            content = restoreCustomBlocks(content, blocks);
-            preserved = blocks.length;
-          }
-        }
-
-        const result = writeIfChanged(absolute, content, { check, root });
-        files.push(preserved ? { ...result, preservedBlocks: preserved } : result);
+      installSkillDir(join(root, target.path(manifest.name)), rendered.files);
+      for (const extra of bundled) {
+        installSkillDir(join(root, target.path(extra.name)), extra.files);
       }
       continue;
     }
@@ -120,7 +142,7 @@ export function installSkills(options: InstallOptions): InstallResult {
 
     if (target.kind === 'mdc') {
       files.push(
-        writeIfChanged(absolute, renderMdc(manifest, description, canonical), { check, root }),
+        writeIfChanged(absolute, renderMdc(manifest, description, canonical, related), { check, root }),
       );
       continue;
     }
@@ -136,7 +158,7 @@ export function installSkills(options: InstallOptions): InstallResult {
     const section =
       target.id === 'claude-md' && writesAgentsMd
         ? renderClaudeMdPointer()
-        : renderSection(manifest, canonical);
+        : renderSection(manifest, canonical, related);
 
     const next = upsertSection(existing, manifest.name, section);
 
@@ -147,7 +169,7 @@ export function installSkills(options: InstallOptions): InstallResult {
     tool: manifest.name,
     files,
     targets: targets.map((t) => t.id),
-    issues: rendered.issues,
+    issues,
     outOfDate: files.some((f) => f.action !== 'unchanged'),
   };
 }

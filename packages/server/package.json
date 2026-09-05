@@ -1,6 +1,6 @@
 {
   "name": "@invokable/server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Self-hostable auth for invokable tools: device-code endpoints for CLIs and OAuth 2.1 for remote MCP clients.",
   "license": "MIT",
   "type": "module",
