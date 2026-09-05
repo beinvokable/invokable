@@ -110,7 +110,23 @@ export function renderClaudeMdPointer(): string {
  * the detail lives in the skill and this only says enough to route the agent
  * there and prevent the two expensive mistakes.
  */
-export function renderSection(manifest: ToolManifest, skillPath: string): string {
+export interface RelatedSkill {
+  /** Directory relative to the project root. */
+  path: string;
+  description: string;
+}
+
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const end = trimmed.search(/[.!?](\s|$)/);
+  return end === -1 ? trimmed : trimmed.slice(0, end + 1);
+}
+
+export function renderSection(
+  manifest: ToolManifest,
+  skillPath: string,
+  related: readonly RelatedSkill[] = [],
+): string {
   const spending = manifest.commands.filter((c) => c.spends);
 
   return `## ${manifest.name}
@@ -131,6 +147,12 @@ ${
   with \`status: "checkpoint"\`. Print \`.display\` verbatim, ask the user, and only then
   run \`.next.approve\`. Never pass \`--yes\`.`
     : ''
+}${
+  related.length
+    ? `\n- Workflows: ${related
+        .map((r) => `\`${r.path}/SKILL.md\` (${firstSentence(r.description).replace(/`/g, '')})`)
+        .join('; ')}`
+    : ''
 }`;
 }
 
@@ -139,12 +161,17 @@ ${
  * agent-requested: Cursor pulls it in when the description matches the task,
  * rather than taxing every request.
  */
-export function renderMdc(manifest: ToolManifest, description: string, skillPath: string): string {
+export function renderMdc(
+  manifest: ToolManifest,
+  description: string,
+  skillPath: string,
+  related: readonly RelatedSkill[] = [],
+): string {
   return `---
 description: ${JSON.stringify(description)}
 alwaysApply: false
 ---
 
-${renderSection(manifest, skillPath)}
+${renderSection(manifest, skillPath, related)}
 `;
 }

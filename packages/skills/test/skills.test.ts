@@ -332,3 +332,148 @@ describe('the init command', () => {
     expect(initCommand().exitCodes).toMatchObject({ 30: expect.any(String) });
   });
 });
+
+describe('developer-written sections', () => {
+  const sections = [
+    { heading: 'First-time setup', body: 'Run `demo-tool connect` after login.', placement: 'after-auth' as const },
+    { heading: 'Using it afterwards', body: 'Prefer the MCP tools for normal work.' },
+    { heading: 'Read this last', body: 'Never guess a project slug.', placement: 'before-never' as const },
+    { heading: 'Appendix', body: 'Extra notes.', placement: 'end' as const },
+  ];
+
+  it('renders each section at its placement, in generated order', () => {
+    const { content } = renderSkillMd({ manifest, sections });
+    const at = (needle: string) => content.indexOf(needle);
+    expect(at('## Check auth before the first command')).toBeLessThan(at('## First-time setup'));
+    expect(at('## First-time setup')).toBeLessThan(at('## Reading a result'));
+    expect(at('## Commands')).toBeLessThan(at('## Using it afterwards'));
+    expect(at('## Using it afterwards')).toBeLessThan(at('## Exit codes'));
+    expect(at('## Approval gates')).toBeLessThan(at('## Read this last'));
+    expect(at('## Read this last')).toBeLessThan(at('## Never'));
+    expect(at('## Never')).toBeLessThan(at('## Appendix'));
+    expect(at('## Appendix')).toBeLessThan(at('<!-- invokable:custom -->'));
+    expect(content).toContain('Run `demo-tool connect` after login.');
+  });
+
+  it('changes nothing when no sections are given', () => {
+    expect(renderSkillMd({ manifest }).content).toBe(renderSkillMd({ manifest, sections: [] }).content);
+  });
+
+  it('reaches every skills directory through installSkills', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, sections: [sections[0]!] });
+    for (const t of TARGETS.filter((t) => t.kind === 'skill')) {
+      const file = readFileSync(join(root, t.path('demo-tool'), 'SKILL.md'), 'utf8');
+      expect(file).toContain('## First-time setup');
+    }
+  });
+
+  it('is what --check compares against, so a changed section is stale', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, sections: [sections[0]!] });
+    const same = installSkills({ manifest, root, sections: [sections[0]!], check: true });
+    expect(same.outOfDate).toBe(false);
+    const edited = installSkills({
+      manifest,
+      root,
+      sections: [{ ...sections[0]!, body: 'Changed.' }],
+      check: true,
+    });
+    expect(edited.outOfDate).toBe(true);
+  });
+});
+
+describe('bundled skills', () => {
+  const plan = {
+    name: 'plan',
+    description:
+      'Builds a 90-day content plan from a saved voice profile. Use when the user asks for a content plan, ' +
+      'a posting plan, or what to publish.',
+    body: '## Steps\n\n1. Call `build_plan`.\n2. Ask the user which goals.\n3. Call `create_plan`.',
+    references: [{ path: 'goals.md', content: '# Goals\n\n- thought_leadership' }],
+  };
+
+  it('installs as <tool>-<name> next to the generated skill, in every skills directory', () => {
+    const root = tempRoot();
+    const result = installSkills({ manifest, root, skills: [plan] });
+    for (const t of TARGETS.filter((t) => t.kind === 'skill')) {
+      const dir = join(root, t.path('demo-tool-plan'));
+      const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+      expect(skill.startsWith('---\nname: demo-tool-plan\n')).toBe(true);
+      expect(skill).toMatch(/^description: "?Builds a 90-day content plan/m);
+      expect(skill).toContain('allowed-tools: Bash, Read');
+      expect(skill).toContain('  tool: demo-tool');
+      expect(skill).toContain('# demo-tool-plan');
+      expect(skill).toContain('1. Call `build_plan`.');
+      expect(skill).toContain('../demo-tool/SKILL.md');
+      expect(readFileSync(join(dir, 'references', 'goals.md'), 'utf8')).toContain('thought_leadership');
+    }
+    expect(result.files.filter((f) => f.path.includes('demo-tool-plan/SKILL.md'))).toHaveLength(5);
+  });
+
+  it('emits only spec-portable frontmatter fields', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, skills: [plan], targets: ['claude-code'] });
+    const content = readFileSync(join(root, '.claude/skills/demo-tool-plan/SKILL.md'), 'utf8');
+    const keys = content
+      .split('---')[1]!
+      .split('\n')
+      .filter((l) => /^[a-z-]+:/.test(l))
+      .map((l) => l.split(':')[0]!);
+    for (const key of keys) expect(['name', 'description', 'allowed-tools', 'license', 'metadata']).toContain(key);
+  });
+
+  it('is listed from the generated skill and from AGENTS.md', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, skills: [plan] });
+    const main = readFileSync(join(root, '.claude/skills/demo-tool/SKILL.md'), 'utf8');
+    expect(main).toContain('## Related skills');
+    expect(main).toContain('`../demo-tool-plan/SKILL.md` — Builds a 90-day content plan from a saved voice profile.');
+    const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(agents).toContain('.claude/skills/demo-tool-plan/SKILL.md');
+    expect(agents).toContain('Builds a 90-day content plan');
+    const mdc = readFileSync(join(root, '.cursor/rules/demo-tool.mdc'), 'utf8');
+    expect(mdc).toContain('demo-tool-plan');
+  });
+
+  it('validates the combined name and the description', () => {
+    const bad = installSkills({
+      manifest,
+      root: tempRoot(),
+      targets: ['claude-code'],
+      skills: [{ name: 'Bad Name', description: 'x'.repeat(DESCRIPTION_MAX + 1), body: 'b' }],
+    });
+    expect(bad.issues.map((i) => i.field)).toEqual(
+      expect.arrayContaining(['skills.Bad Name.name', 'skills.Bad Name.description']),
+    );
+  });
+
+  it('preserves a custom block in a bundled skill across regeneration', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, skills: [plan], targets: ['claude-code'] });
+    const path = join(root, '.claude/skills/demo-tool-plan/SKILL.md');
+    const edited = readFileSync(path, 'utf8').replace(
+      /<!-- invokable:custom -->[\s\S]*?<!-- \/invokable:custom -->/,
+      '<!-- invokable:custom -->\nOur team never posts on Fridays.\n<!-- /invokable:custom -->',
+    );
+    writeFileSync(path, edited);
+    const again = installSkills({ manifest, root, skills: [plan], targets: ['claude-code'] });
+    expect(readFileSync(path, 'utf8')).toContain('Our team never posts on Fridays.');
+    expect(again.files.find((f) => f.path.endsWith('demo-tool-plan/SKILL.md'))?.preservedBlocks).toBe(1);
+  });
+
+  it('--check catches a stale bundled skill', () => {
+    const root = tempRoot();
+    installSkills({ manifest, root, skills: [plan], targets: ['claude-code'] });
+    expect(installSkills({ manifest, root, skills: [plan], targets: ['claude-code'], check: true }).outOfDate).toBe(false);
+    expect(
+      installSkills({ manifest, root, skills: [{ ...plan, body: 'new body' }], targets: ['claude-code'], check: true })
+        .outOfDate,
+    ).toBe(true);
+  });
+
+  it('flows through initCommand options', () => {
+    const cmd = initCommand({ skills: [plan], sections: [{ heading: 'Setup', body: 'Do this.' }] });
+    expect(cmd.description).toContain('Install agent instructions');
+  });
+});

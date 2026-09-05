@@ -2,6 +2,54 @@ import { EXIT, EXIT_DESCRIPTION, type ExitName, type ToolManifest } from '@invok
 import { emptyCustomBlock } from './markers.js';
 import { DESCRIPTION_MAX, validateDescription, validateSkillName, type ValidationIssue } from './spec.js';
 
+/**
+ * Where a developer-written section lands in the generated SKILL.md.
+ *
+ * The generated chapters run: auth check → reading a result → commands → exit
+ * codes → approval gates → Never → custom block → reference. Setup steps belong
+ * right after the auth check; product guidance after the commands; anything
+ * the agent must read last, before the Never rules.
+ */
+export type SectionPlacement = 'after-auth' | 'after-commands' | 'before-never' | 'end';
+
+/** A developer-written section rendered into the tool's SKILL.md. */
+export interface SkillSection {
+  /** Rendered as `## <heading>`. */
+  heading: string;
+  /** Markdown. May contain further `###` headings. */
+  body: string;
+  /** Default `after-commands`. */
+  placement?: SectionPlacement;
+}
+
+/**
+ * A skill that ships with the tool beyond the generated one.
+ *
+ * The generated SKILL.md teaches an agent how to *operate* the tool. A bundled
+ * skill teaches it what to *do* with the tool — a multi-step workflow, when to
+ * ask the user what, what never to do — and is loaded by its own triggers, so
+ * an agent asked for the balance does not carry the content-planning playbook.
+ *
+ * Installed as `<tool>-<name>` next to the generated skill, in every skills
+ * directory, by the same `init`, and covered by the same `--check`.
+ */
+export interface BundledSkill {
+  /** Appended to the tool name: `plan` becomes `credmcp-plan`. Lowercase, digits, hyphens. */
+  name: string;
+  /**
+   * The trigger line: what every agent reads to decide whether to load this
+   * skill. Lead with the capability, then the phrases a user would say.
+   */
+  description: string;
+  /** Markdown body, written after the title. */
+  body: string;
+  /** Extra files under `references/`. */
+  references?: readonly { path: string; content: string }[];
+  /** Defaults to the tool skill's. */
+  allowedTools?: readonly string[];
+  license?: string;
+}
+
 export interface RenderOptions {
   manifest: ToolManifest;
   /** Overrides the generated `description` frontmatter. */
@@ -11,6 +59,10 @@ export interface RenderOptions {
   triggers?: readonly string[];
   /** Defaults to `Bash, Read`. */
   allowedTools?: readonly string[];
+  /** Developer-written sections rendered into the generated SKILL.md. */
+  sections?: readonly SkillSection[];
+  /** Skills shipped alongside the generated one. */
+  skills?: readonly BundledSkill[];
 }
 
 export interface RenderedFile {
@@ -116,6 +168,20 @@ function renderExitCodesSection(manifest: ToolManifest): string {
   return table(['Exit', 'Name', 'What to do'], rows);
 }
 
+/** The directory and frontmatter `name` of a bundled skill. */
+export function bundledSkillName(toolName: string, skill: BundledSkill): string {
+  return `${toolName}-${skill.name}`;
+}
+
+function renderSections(sections: readonly SkillSection[] | undefined, placement: SectionPlacement): string {
+  const chosen = (sections ?? []).filter((s) => (s.placement ?? 'after-commands') === placement);
+  if (!chosen.length) return '';
+  return chosen.map((s) => `## ${s.heading.trim()}
+
+${s.body.trim()}
+`).join('\n') + '\n';
+}
+
 /** The main SKILL.md, using only the six spec-portable frontmatter fields. */
 export function renderSkillMd(opts: RenderOptions): { content: string; issues: ValidationIssue[] } {
   const { manifest } = opts;
@@ -123,6 +189,7 @@ export function renderSkillMd(opts: RenderOptions): { content: string; issues: V
   const issues = [...validateSkillName(manifest.name), ...validateDescription(description)];
 
   const spending = manifest.commands.filter((c) => c.spends);
+  const bundled = opts.skills ?? [];
 
   const body = `
 # ${manifest.name}
@@ -149,7 +216,7 @@ Read \`.data.auth.ok\`:
 If \`.data.api.reachable\` is \`false\`, the network or the service is down. Say so;
 do not retry in a loop.
 
-## Reading a result
+${renderSections(opts.sections, 'after-auth')}## Reading a result
 
 \`\`\`bash
 ${manifest.name} <command> --json
@@ -165,7 +232,7 @@ ${manifest.name} <command> --json
 
 ${renderCommandsSection(manifest)}
 
-## Exit codes
+${renderSections(opts.sections, 'after-commands')}## Exit codes
 
 ${renderExitCodesSection(manifest)}
 
@@ -195,7 +262,7 @@ See \`references/checkpoints.md\`.
 `
     : ''
 }
-## Never
+${renderSections(opts.sections, 'before-never')}## Never
 
 - **Never pass \`--yes\`.** It approves spending without asking the user. The gate
   exists because the cost is theirs, not yours.
@@ -208,15 +275,78 @@ See \`references/checkpoints.md\`.
 - **Never invent a command.** Run \`${manifest.name} --help --json\` for the exact
   schema of every command and option.
 
-${emptyCustomBlock('Add project-specific guidance here. It survives regeneration.')}
+${renderSections(opts.sections, 'end')}${emptyCustomBlock('Add project-specific guidance here. It survives regeneration.')}
 
 ## Reference
 
 - \`references/commands.md\` — every option of every command
 - \`references/errors.md\` — every exit code and the correct response
-${spending.length ? '- `references/checkpoints.md` — the approval flow in detail\n' : ''}`.trimStart();
+${spending.length ? '- `references/checkpoints.md` — the approval flow in detail\n' : ''}${
+  bundled.length
+    ? `
+## Related skills
+
+Shipped with this tool and installed next to it. Load the one whose description
+matches the task.
+
+${bundled.map((sk) => `- \`../${bundledSkillName(manifest.name, sk)}/SKILL.md\` — ${firstSentence(sk.description)}`).join('\n')}
+`
+    : ''
+}`.trimStart();
 
   return { content: `${renderFrontmatter(opts, description)}\n\n${body}`, issues };
+}
+
+function firstSentence(text: string): string {
+  const trimmed = text.trim();
+  const end = trimmed.search(/[.!?](\s|$)/);
+  return end === -1 ? trimmed : trimmed.slice(0, end + 1);
+}
+
+/** One bundled skill: frontmatter, title, the developer's body, a custom block, references. */
+export function renderBundledSkill(opts: RenderOptions, skill: BundledSkill): RenderedSkill {
+  const name = bundledSkillName(opts.manifest.name, skill);
+  const description = skill.description.trim();
+  const issues = [...validateSkillName(name), ...validateDescription(description)].map((i) => ({
+    ...i,
+    field: `skills.${skill.name}.${i.field}`,
+  }));
+  const allowed = (skill.allowedTools ?? opts.allowedTools ?? ['Bash', 'Read']).join(', ');
+  const license = skill.license ?? opts.license;
+
+  const frontmatter = [
+    '---',
+    `name: ${name}`,
+    `description: ${yamlString(description)}`,
+    `allowed-tools: ${allowed}`,
+    ...(license ? [`license: ${yamlString(license)}`] : []),
+    'metadata:',
+    `  tool: ${yamlString(opts.manifest.name)}`,
+    `  tool-version: ${yamlString(opts.manifest.version)}`,
+    '  generated-by: "@invokable/skills"',
+    '---',
+  ].join('\n');
+
+  const content = `${frontmatter}
+
+# ${name}
+
+${skill.body.trim()}
+
+${emptyCustomBlock('Add project-specific guidance here. It survives regeneration.')}
+
+## Operating the tool
+
+How to run \`${opts.manifest.name}\` commands, read results and handle approval gates is in
+\`../${opts.manifest.name}/SKILL.md\`. Read it before the first command.
+`;
+
+  const files: RenderedFile[] = [{ path: 'SKILL.md', content }];
+  for (const ref of skill.references ?? []) {
+    const path = ref.path.replace(/^\/+/, '');
+    files.push({ path: path.startsWith('references/') ? path : `references/${path}`, content: ref.content });
+  }
+  return { name, files, issues };
 }
 
 export function renderCommandsReference(manifest: ToolManifest): string {
@@ -370,7 +500,7 @@ If the user explicitly instructs you to run without prompting, prefer
 `;
 }
 
-/** Renders the complete portable skill bundle. */
+/** Renders the complete portable skill bundle for the tool itself. See `renderBundledSkill` for the extras. */
 export function renderSkill(opts: RenderOptions): RenderedSkill {
   const { content, issues } = renderSkillMd(opts);
   const files: RenderedFile[] = [

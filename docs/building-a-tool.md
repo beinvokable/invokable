@@ -66,7 +66,7 @@ your API has one auth check and one credits ledger.
 | `@invokable/conformance` | `invokable-test`: checks your CLI honours the contract |
 | `create-invokable` | scaffolds a project |
 
-All share one version. This guide is written against **0.4.0**.
+All share one version. This guide is written against **0.5.0**.
 
 ### The contract, in one paragraph
 
@@ -1322,15 +1322,69 @@ Add the MCP setup to the description so an agent finds it: the description is
 what triggers skill loading.
 
 ```ts
-init: initCommand(),
-// and in defineTool:
+// in defineTool:
 description:
   'Rewrites text in a clearer voice, billed in credits. Setup is three commands in order: ' +
   '`polish init`, then `polish login` (the user runs this; it opens a browser), then `polish connect`.',
 ```
 
-In CI, `polish init --check` exits **30** when the schema changed and the
-instructions were not regenerated.
+### Your knowledge, next to the generated knowledge
+
+The generated skill says how to operate the tool. What the tool is *for*, the
+order of a workflow, what to ask before a paid call, is yours to write, and
+`initCommand` takes it in two forms so it ships with the package and is
+covered by the same `--check`:
+
+```ts
+init: initCommand({
+  // Sections go into polish's own SKILL.md, at a chosen place.
+  sections: [
+    {
+      heading: 'First-time setup',
+      placement: 'after-auth',
+      body: `
+1. \`polish login\` — ask the **user** to run this; it opens a browser and waits.
+2. \`polish connect\` — registers the MCP server with this project.
+3. Reload the MCP client, then \`polish verify --json\`.`,
+    },
+    {
+      heading: 'Using it afterwards',
+      body: 'Prefer the MCP tools for normal work; the CLI exists for setup and for the approval gate.',
+    },
+  ],
+  // Bundled skills are installed as polish-<name> and loaded by their own triggers.
+  skills: [
+    {
+      name: 'editing-pass',
+      description:
+        'Runs a full editing pass over a document with polish, section by section, and reports the ' +
+        'total cost first. Use when the user asks to polish, tighten or clean up a whole document.',
+      body: `
+## Steps
+
+1. Split the document at headings. Count sections.
+2. Tell the user: N sections × 50 credits. Call \`get_balance\` and say whether it covers it.
+3. Only if they agree, call \`rewrite_text\` per section, in order.
+4. Show the result as one document, marking anything you did not change.`,
+    },
+  ],
+}),
+```
+
+```console
+$ polish init
+created: .claude/skills/polish/SKILL.md               ← with the two sections in place
+created: .claude/skills/polish-editing-pass/SKILL.md  ← the bundled skill
+…
+```
+
+Rule of thumb: the MCP tool description is one call's contract and is read
+*after* the model chose the tool; a skill is read *before*. Anything that
+decides whether and in what order tools are called belongs in a section or a
+bundled skill. `@invokable/skills`' README has the full table.
+
+In CI, `polish init --check` exits **30** when the schema, a section or a
+bundled skill changed and the instructions were not regenerated.
 
 ## 1.9 Conformance and CI
 
