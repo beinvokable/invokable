@@ -44,6 +44,10 @@ login, the approval gate, the agent instructions — comes from the packages.
 | [`@invokable/conformance`](https://www.npmjs.com/package/@invokable/conformance) | [src](packages/conformance) · [docs](packages/conformance/README.md) | `invokable-test` — checks a CLI honours the contract |
 | [`create-invokable`](https://www.npmjs.com/package/create-invokable) | [src](packages/create-invokable) · [docs](packages/create-invokable/README.md) | Scaffolds a project |
 
+**Building a tool?** [`docs/building-a-tool.md`](docs/building-a-tool.md) is
+the complete guide: hosted and self-hosted, CLI plus MCP over stdio and over
+HTTP for ChatGPT and Claude.ai, credits, checkpoints, every input and output.
+
 Examples: [`examples/demo-tool`](examples/demo-tool) is a working CLI;
 [`examples/mcp`](examples/mcp) exposes the same CLI over the Model Context
 Protocol. [`examples/server`](examples/server) is a complete backend with a runnable
