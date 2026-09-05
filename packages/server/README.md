@@ -1,7 +1,9 @@
 # @invokable/server
 
-Self-hostable device-code auth for [invokable](https://github.com/beinvokable/invokable)
-tools. Implements the five endpoints `@invokable/core`'s `login` command talks to.
+Self-hostable auth for [invokable](https://github.com/beinvokable/invokable)
+tools: the device-code endpoints `@invokable/core`'s `login` command talks to,
+and an OAuth 2.1 authorization server for remote MCP clients (ChatGPT, Claude.ai)
+that issues the very same tokens.
 
 ## Use
 
@@ -78,3 +80,97 @@ Also not handled here, and yours to add:
   are provided; see below. `memoryStore()` is for development only.
 - **Audit logging.** The store records who approved what and when; surfacing it
   is the host application's job.
+
+## Remote MCP clients: OAuth 2.1
+
+A CLI signs in with the device flow. ChatGPT, Claude.ai and other hosted MCP
+clients cannot run a CLI: they find an authorization server from your MCP
+endpoint's metadata, register themselves, send the user through a browser
+consent page, and exchange a code for a bearer token. `invokableOAuth` is that
+server.
+
+**The token it issues is the same `TokenRecord`, in the same `AuthStore`, as
+the device flow.** `/cli/whoami` and `/cli/logout` accept it, and a resource
+server that verifies bearer tokens by asking the issuer needs no change. One
+backend, two ways in.
+
+```js
+import { invokableAuth, invokableOAuth, memoryStore, memoryOAuthStore } from '@invokable/server';
+
+const store = memoryStore();                 // shared: both flows write tokens here
+const auth = invokableAuth({ store, tokenPrefix: 'mtl', requireSession });
+const oauth = invokableOAuth({
+  store,                                     // the SAME store
+  oauthStore: memoryOAuthStore(),            // clients, pending grants, refresh tokens
+  tokenPrefix: 'mtl',
+  requireSession,                            // the same browser session
+  consentPage: ({ client, grant, user, requestId }) => renderMyConsentPage(...),
+  tokenTtl: 30 * 24 * 60 * 60 * 1000,        // access tokens expire → refresh tokens are issued
+});
+
+const handler = async (request) => (await auth(request)) ?? (await oauth(request));
+```
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| `POST` | `/oauth/register` | RFC 7591 dynamic client registration |
+| `GET` | `/oauth/authorize` | Validates the request, records it, renders the consent page |
+| `POST` | `/oauth/approve` | Records the decision — **requires a session** — and redirects with a code |
+| `POST` | `/oauth/token` | `authorization_code` (PKCE S256, mandatory) and `refresh_token` |
+| `POST` | `/oauth/revoke` | RFC 7009 |
+
+`handler.begin(request)` validates and records an authorization request
+without rendering, for host applications that draw the consent page
+themselves (a React route, say). It returns `{ kind: 'consent', requestId,
+client, grant, scopes }`, or `{ kind: 'redirect', location }` for a protocol
+error that goes back to a verified client, or `{ kind: 'invalid', status,
+message }` when the client or redirect URI could not be verified and nothing
+may be redirected.
+
+### What it does about security
+
+- **PKCE is required of every client**, public or confidential. `S256` only.
+- **Redirect URIs match exactly** against what the client registered, and a
+  registration may only name `https` URIs or `http` on the loopback interface.
+  An unknown client or unregistered URI gets a 400 page, never a redirect.
+- **Codes are single-use and stored hashed**, valid for ten minutes. A replayed
+  code yields nothing; the exchange burns it before minting the token.
+- **Refresh tokens rotate.** Using one revokes it and the access token it
+  guarded; presenting a rotated-out refresh token again revokes the new access
+  token too, on the assumption that someone else holds it.
+- **Client secrets are stored hashed**, like tokens.
+- **Approval requires a session**, as with the device flow.
+
+Yours to add, as with the device flow: CSRF on `/oauth/approve` when your
+consent page is served from a cookie-authenticated origin, and rate limiting on
+`/oauth/register`.
+
+### The resource server side
+
+Your tool's MCP endpoint has to tell a client where to sign in. RFC 9728 says
+how: a 401 whose `WWW-Authenticate` header points at a metadata document that
+names the authorization server.
+
+```js
+import { oauthProtectedResource } from '@invokable/server';
+
+const resource = oauthProtectedResource({
+  authorizationServers: ['https://auth.invokable.dev'],
+  resourcePath: '/mcp',
+});
+
+// In your router:
+const wellKnown = await resource(request);      // /.well-known/oauth-protected-resource[/mcp]
+if (wellKnown) return wellKnown;
+
+// In your MCP handler, when the bearer token is missing or rejected:
+return resource.unauthorized(request, { error: 'invalid_token' });
+```
+
+It also relays `/.well-known/oauth-authorization-server` from the first
+authorization server, for clients that look there instead of following the
+protected-resource metadata.
+
+Verifying the token stays yours, and is the same as for CLI callers: ask the
+issuer's `/cli/whoami`.

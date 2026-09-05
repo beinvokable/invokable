@@ -77,6 +77,51 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
     issued_to    TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS invokable_checkpoints_expires_at ON invokable_checkpoints (expires_at)`,
+
+  // OAuth 2.1 for remote MCP clients. The tokens these produce live in
+  // invokable_tokens above; these tables only hold the way there.
+  `CREATE TABLE IF NOT EXISTS invokable_oauth_clients (
+    client_id                  TEXT PRIMARY KEY,
+    client_secret_hash         TEXT,
+    client_name                TEXT NOT NULL,
+    redirect_uris              TEXT NOT NULL,
+    token_endpoint_auth_method TEXT NOT NULL,
+    client_uri                 TEXT,
+    logo_uri                   TEXT,
+    created_at                 BIGINT NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS invokable_oauth_grants (
+    id                    TEXT PRIMARY KEY,
+    client_id             TEXT NOT NULL,
+    redirect_uri          TEXT NOT NULL,
+    scope                 TEXT NOT NULL,
+    state                 TEXT,
+    code_challenge        TEXT NOT NULL,
+    code_challenge_method TEXT NOT NULL,
+    resource              TEXT,
+    status                TEXT NOT NULL,
+    subject               TEXT,
+    org_id                TEXT,
+    code_hash             TEXT,
+    created_at            BIGINT NOT NULL,
+    expires_at            BIGINT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS invokable_oauth_grants_code_hash ON invokable_oauth_grants (code_hash)`,
+  `CREATE INDEX IF NOT EXISTS invokable_oauth_grants_expires_at ON invokable_oauth_grants (expires_at)`,
+
+  `CREATE TABLE IF NOT EXISTS invokable_oauth_refresh_tokens (
+    refresh_hash TEXT PRIMARY KEY,
+    token_hash   TEXT NOT NULL,
+    client_id    TEXT NOT NULL,
+    subject      TEXT NOT NULL,
+    org_id       TEXT,
+    scope        TEXT NOT NULL,
+    created_at   BIGINT NOT NULL,
+    expires_at   BIGINT,
+    revoked_at   BIGINT
+  )`,
+  `CREATE INDEX IF NOT EXISTS invokable_oauth_refresh_tokens_subject ON invokable_oauth_refresh_tokens (subject)`,
 ];
 
 /** The whole schema as one script, for running by hand with psql. */

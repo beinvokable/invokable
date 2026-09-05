@@ -1,6 +1,6 @@
 {
   "name": "@invokable/skills",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Generates portable Agent Skills (SKILL.md) and agent instruction files from an invokable tool schema.",
   "license": "MIT",
   "type": "module",

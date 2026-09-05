@@ -1,5 +1,13 @@
 import type { AuthStore, DeviceRecord, DeviceState, TokenRecord } from './store.js';
 import type { CheckpointRecord, CheckpointStore } from './checkpoints.js';
+import type {
+  OAuthClientAuthMethod,
+  OAuthClientRecord,
+  OAuthGrantRecord,
+  OAuthGrantStatus,
+  OAuthRefreshRecord,
+  OAuthStore,
+} from './oauth-store.js';
 import {
   createSchema,
   toNumber,
@@ -45,6 +53,130 @@ interface CheckpointRow {
   consumed_at: unknown;
   issued_to: string | null;
 }
+
+interface OAuthClientRow {
+  client_id: string;
+  client_secret_hash: string | null;
+  client_name: string;
+  redirect_uris: string;
+  token_endpoint_auth_method: string;
+  client_uri: string | null;
+  logo_uri: string | null;
+  created_at: unknown;
+}
+
+interface OAuthGrantRow {
+  id: string;
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+  state: string | null;
+  code_challenge: string;
+  code_challenge_method: string;
+  resource: string | null;
+  status: string;
+  subject: string | null;
+  org_id: string | null;
+  code_hash: string | null;
+  created_at: unknown;
+  expires_at: unknown;
+}
+
+interface OAuthRefreshRow {
+  refresh_hash: string;
+  token_hash: string;
+  client_id: string;
+  subject: string;
+  org_id: string | null;
+  scope: string;
+  created_at: unknown;
+  expires_at: unknown;
+  revoked_at: unknown;
+}
+
+function toOAuthClient(row: OAuthClientRow): OAuthClientRecord {
+  let redirectUris: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.redirect_uris);
+    if (Array.isArray(parsed)) redirectUris = parsed.filter((u): u is string => typeof u === 'string');
+  } catch {
+    redirectUris = [];
+  }
+  const record: OAuthClientRecord = {
+    clientId: row.client_id,
+    clientName: row.client_name,
+    redirectUris,
+    tokenEndpointAuthMethod: row.token_endpoint_auth_method as OAuthClientAuthMethod,
+    createdAt: toNumber(row.created_at),
+  };
+  const secretHash = toOptionalString(row.client_secret_hash);
+  const clientUri = toOptionalString(row.client_uri);
+  const logoUri = toOptionalString(row.logo_uri);
+  if (secretHash !== undefined) record.clientSecretHash = secretHash;
+  if (clientUri !== undefined) record.clientUri = clientUri;
+  if (logoUri !== undefined) record.logoUri = logoUri;
+  return record;
+}
+
+function toOAuthGrant(row: OAuthGrantRow): OAuthGrantRecord {
+  const record: OAuthGrantRecord = {
+    id: row.id,
+    clientId: row.client_id,
+    redirectUri: row.redirect_uri,
+    scope: row.scope,
+    codeChallenge: row.code_challenge,
+    codeChallengeMethod: 'S256',
+    status: row.status as OAuthGrantStatus,
+    createdAt: toNumber(row.created_at),
+    expiresAt: toNumber(row.expires_at),
+  };
+  const state = toOptionalString(row.state);
+  const resource = toOptionalString(row.resource);
+  const subject = toOptionalString(row.subject);
+  const orgId = toOptionalString(row.org_id);
+  const codeHash = toOptionalString(row.code_hash);
+  if (state !== undefined) record.state = state;
+  if (resource !== undefined) record.resource = resource;
+  if (subject !== undefined) record.subject = subject;
+  if (orgId !== undefined) record.orgId = orgId;
+  if (codeHash !== undefined) record.codeHash = codeHash;
+  return record;
+}
+
+function toOAuthRefresh(row: OAuthRefreshRow): OAuthRefreshRecord {
+  const record: OAuthRefreshRecord = {
+    refreshHash: row.refresh_hash,
+    tokenHash: row.token_hash,
+    clientId: row.client_id,
+    subject: row.subject,
+    scope: row.scope,
+    createdAt: toNumber(row.created_at),
+    expiresAt: row.expires_at === null || row.expires_at === undefined ? null : toNumber(row.expires_at),
+  };
+  const orgId = toOptionalString(row.org_id);
+  const revokedAt = toOptionalNumber(row.revoked_at);
+  if (orgId !== undefined) record.orgId = orgId;
+  if (revokedAt !== undefined) record.revokedAt = revokedAt;
+  return record;
+}
+
+/** Column name for each patchable grant field, for the partial UPDATE. */
+const GRANT_COLUMNS: Record<keyof OAuthGrantRecord, string> = {
+  id: 'id',
+  clientId: 'client_id',
+  redirectUri: 'redirect_uri',
+  scope: 'scope',
+  state: 'state',
+  codeChallenge: 'code_challenge',
+  codeChallengeMethod: 'code_challenge_method',
+  resource: 'resource',
+  status: 'status',
+  subject: 'subject',
+  orgId: 'org_id',
+  codeHash: 'code_hash',
+  createdAt: 'created_at',
+  expiresAt: 'expires_at',
+};
 
 function toDevice(row: DeviceRow): DeviceRecord {
   const record: DeviceRecord = {
@@ -122,6 +254,7 @@ export interface PostgresStoreOptions {
 export interface PurgeResult {
   devices: number;
   checkpoints: number;
+  oauthGrants: number;
 }
 
 /**
@@ -286,6 +419,133 @@ export function postgresCheckpointStore(options: PostgresStoreOptions): Checkpoi
   };
 }
 
+/** Durable store for the OAuth 2.1 authorization server. */
+export function postgresOAuthStore(options: PostgresStoreOptions): OAuthStore {
+  const { exec } = options;
+
+  return {
+    async createClient(record) {
+      await exec.query(
+        `INSERT INTO invokable_oauth_clients
+           (client_id, client_secret_hash, client_name, redirect_uris,
+            token_endpoint_auth_method, client_uri, logo_uri, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          record.clientId,
+          record.clientSecretHash ?? null,
+          record.clientName,
+          JSON.stringify(record.redirectUris),
+          record.tokenEndpointAuthMethod,
+          record.clientUri ?? null,
+          record.logoUri ?? null,
+          record.createdAt,
+        ],
+      );
+    },
+
+    async findClient(clientId) {
+      const { rows } = await exec.query<OAuthClientRow>(
+        'SELECT * FROM invokable_oauth_clients WHERE client_id = $1',
+        [clientId],
+      );
+      return rows[0] ? toOAuthClient(rows[0]) : null;
+    },
+
+    async createGrant(record) {
+      await exec.query(
+        `INSERT INTO invokable_oauth_grants
+           (id, client_id, redirect_uri, scope, state, code_challenge, code_challenge_method,
+            resource, status, subject, org_id, code_hash, created_at, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [
+          record.id,
+          record.clientId,
+          record.redirectUri,
+          record.scope,
+          record.state ?? null,
+          record.codeChallenge,
+          record.codeChallengeMethod,
+          record.resource ?? null,
+          record.status,
+          record.subject ?? null,
+          record.orgId ?? null,
+          record.codeHash ?? null,
+          record.createdAt,
+          record.expiresAt,
+        ],
+      );
+    },
+
+    async findGrant(id) {
+      const { rows } = await exec.query<OAuthGrantRow>(
+        'SELECT * FROM invokable_oauth_grants WHERE id = $1',
+        [id],
+      );
+      return rows[0] ? toOAuthGrant(rows[0]) : null;
+    },
+
+    async findGrantByCodeHash(codeHash) {
+      const { rows } = await exec.query<OAuthGrantRow>(
+        'SELECT * FROM invokable_oauth_grants WHERE code_hash = $1 ORDER BY created_at DESC LIMIT 1',
+        [codeHash],
+      );
+      return rows[0] ? toOAuthGrant(rows[0]) : null;
+    },
+
+    async updateGrant(id, patch) {
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      for (const [key, value] of Object.entries(patch)) {
+        const column = GRANT_COLUMNS[key as keyof OAuthGrantRecord];
+        if (!column) continue;
+        params.push(value ?? null);
+        sets.push(`${column} = $${params.length}`);
+      }
+      if (sets.length === 0) return;
+      params.push(id);
+      await exec.query(
+        `UPDATE invokable_oauth_grants SET ${sets.join(', ')} WHERE id = $${params.length}`,
+        params,
+      );
+    },
+
+    async createRefresh(record) {
+      await exec.query(
+        `INSERT INTO invokable_oauth_refresh_tokens
+           (refresh_hash, token_hash, client_id, subject, org_id, scope,
+            created_at, expires_at, revoked_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          record.refreshHash,
+          record.tokenHash,
+          record.clientId,
+          record.subject,
+          record.orgId ?? null,
+          record.scope,
+          record.createdAt,
+          record.expiresAt,
+          record.revokedAt ?? null,
+        ],
+      );
+    },
+
+    async findRefreshByHash(refreshHash) {
+      const { rows } = await exec.query<OAuthRefreshRow>(
+        'SELECT * FROM invokable_oauth_refresh_tokens WHERE refresh_hash = $1',
+        [refreshHash],
+      );
+      return rows[0] ? toOAuthRefresh(rows[0]) : null;
+    },
+
+    async revokeRefresh(refreshHash, at) {
+      await exec.query(
+        'UPDATE invokable_oauth_refresh_tokens SET revoked_at = $1 WHERE refresh_hash = $2 AND revoked_at IS NULL',
+        [at, refreshHash],
+      );
+    },
+  };
+}
+
 /**
  * Deletes rows that can no longer be used. Nothing depends on this for
  * correctness — expiry is enforced on read — but without it the tables grow
@@ -309,7 +569,16 @@ export async function purgeExpired(
     [cutoff],
   );
 
-  return { devices: devices.rows.length, checkpoints: checkpoints.rows.length };
+  const oauthGrants = await exec.query<{ id: string }>(
+    'DELETE FROM invokable_oauth_grants WHERE expires_at < $1 RETURNING id',
+    [cutoff],
+  );
+
+  return {
+    devices: devices.rows.length,
+    checkpoints: checkpoints.rows.length,
+    oauthGrants: oauthGrants.rows.length,
+  };
 }
 
 export { createSchema };

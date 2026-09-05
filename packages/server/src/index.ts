@@ -37,9 +37,32 @@ export type {
 
 export { stableStringify } from './stable-json.js';
 
+export { invokableOAuth, isAcceptableRedirectUri } from './oauth.js';
+export type {
+  InvokableOAuthOptions,
+  InvokableOAuthHandler,
+  ConsentPageContext,
+  AuthorizeOutcome,
+  StaticOAuthClient,
+} from './oauth.js';
+
+export { memoryOAuthStore } from './oauth-store.js';
+export type {
+  OAuthStore,
+  OAuthClientRecord,
+  OAuthClientAuthMethod,
+  OAuthGrantRecord,
+  OAuthGrantStatus,
+  OAuthRefreshRecord,
+} from './oauth-store.js';
+
+export { oauthProtectedResource } from './resource.js';
+export type { ProtectedResourceOptions, ProtectedResource } from './resource.js';
+
 export {
   postgresAuthStore,
   postgresCheckpointStore,
+  postgresOAuthStore,
   purgeExpired,
   createSchema,
 } from './postgres-store.js';

@@ -293,6 +293,36 @@ everything else from `--help --json` and needs no other change.
 
 ---
 
+## Remote hosts: ChatGPT, Claude.ai, and anything without a shell
+
+Everything above assumes the host launches the server as a local process over
+stdio and that a token is already on disk from `<cli> login`. ChatGPT and
+Claude.ai connectors have neither: they speak Streamable HTTP to a URL, and
+they obtain a token themselves through OAuth. The adapter is the same; two
+things change around it.
+
+**Transport.** Serve the same `McpServer` over
+`WebStandardStreamableHTTPServerTransport` from the SDK, stateless, one
+transport per request. Stateless matters on serverless platforms, where the
+request that initialised a session and the request that calls a tool may hit
+different workers.
+
+**Auth.** Instead of reading the token file, take the bearer token from the
+request and forward it to your API exactly as the CLI would. When it is
+missing or rejected, answer with `oauthProtectedResource(...).unauthorized()`
+from `@invokable/server`: a 401 whose `WWW-Authenticate` header points at
+`/.well-known/oauth-protected-resource`, which names the authorization
+server. The host registers there, sends the user through consent, and comes
+back with a token your API already knows how to verify — it is the same token
+the device flow issues. See the `@invokable/server` README.
+
+**Checkpoints.** Hosted clients do not support elicitation yet, so §5 above is
+the path: return the checkpoint as the result, let the model ask the user, and
+accept the approval on a second call.
+
+`demo-invokeable` (the `credmcp` package) is a complete example: `packages/credmcp/src/http.ts`
+is the request handler, `apps/web/src/app/mcp/route.ts` mounts it.
+
 ## MCP or a skill?
 
 You do not have to choose, and the answer differs per host.
