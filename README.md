@@ -386,8 +386,10 @@ Slices, in dependency order. Each one ships working and tested.
 Phase 1's P0 list from the spec is complete apart from publishing to npm and the
 hosted auth deployment, which are deployment steps rather than code.
 
-Guides: [`docs/credits.md`](docs/credits.md) (pricing, quotas and metering) and
-[`docs/mcp.md`](docs/mcp.md) (building an MCP server for a tool).
+Guides: [`docs/overview.md`](docs/overview.md) (who this is for, which pieces you
+need, the user journeys), [`docs/auth.md`](docs/auth.md) (hosted, self-hosted or
+your own identity), [`docs/credits.md`](docs/credits.md) (pricing, quotas and
+metering) and [`docs/mcp.md`](docs/mcp.md) (building an MCP server for a tool).
 
 Design docs: [`docs/spec-v0.1.md`](docs/spec-v0.1.md) (original spec) and
 [`docs/adr/`](docs/adr/).
