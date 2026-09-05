@@ -11,7 +11,7 @@
  * the approve endpoint the way the approval page's form would.
  */
 import { execFile, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -130,7 +130,34 @@ try {
   step('7. Server state');
   const state = await (await fetch(`${SERVER}/v1/state`)).json();
   console.log(`  deploys: ${JSON.stringify(state.deploys)}   balance: ${state.balance}`);
-  console.log(dim('\n  One deploy, not two. That is the gate doing its job.\n'));
+  console.log(dim('\n  One deploy, not two. That is the gate doing its job.'));
+
+  // -------------------------------------------------------------------------
+  // The harder billing case: a price nobody knows until the work is done.
+  // -------------------------------------------------------------------------
+
+  step('8. What can I afford?');
+  console.log(dim('  Read-only and free, so an agent can check before it plans.'));
+  await run(['balance', '--json']);
+
+  step('9. Summarise — the quote is a CEILING, not a guess');
+  console.log(dim('  Cost depends on tokens in and out, and neither is known yet.'));
+  const doc = join(configDir, 'report.txt');
+  writeFileSync(doc, 'Quarterly figures and the commentary around them. '.repeat(1600));
+  const meterGate = await run(['summarize', '--file', doc, '--json'], { expectFailure: true });
+  const meterEnvelope = JSON.parse(meterGate.stdout);
+  console.log(`\n${meterEnvelope.display}`);
+
+  step('10. Approve — and the charge lands under the quote');
+  await run(meterEnvelope.next.approve.split(' ').slice(1));
+  console.log(
+    dim('\n  Charged less than quoted, because the model wrote less than the ceiling.'),
+  );
+
+  step('11. The ledger explains itself');
+  console.log(dim('  estimated vs charged, per transaction. "Why that number?" has an answer.'));
+  await run(['balance', '--json']);
+  console.log(dim('\n  Two shapes of billing, one gate.\n'));
 } finally {
   rmSync(configDir, { recursive: true, force: true });
 }

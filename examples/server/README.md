@@ -98,8 +98,23 @@ Two things bite here:
 
 ### 3. Your API
 
-Whatever your tool calls. In this example: `POST /v1/deploy/plan` (open) and
-`POST /v1/deploy` (guarded).
+Whatever your tool calls. This example serves two services, chosen to show the
+two shapes billing takes:
+
+| Route | Guarded | Price |
+| --- | --- | --- |
+| `POST /v1/deploy/plan` | no | — |
+| `POST /v1/deploy` | yes | Fixed. Known before the work. |
+| `POST /v1/summarize/plan` | no | — |
+| `POST /v1/summarize/:planId` | yes | **Not known until the work is done** — it comes from model token usage. |
+| `GET /v1/balance` | no | Free. What an agent checks before it plans. |
+
+The second shape is the one most products actually have, and it needs more than
+a number: a quoted ceiling rather than a guess, a hold so the balance survives
+until the approval is used, capture keyed by the fingerprint so a retry cannot
+double-bill, and a decided policy for when the real cost overruns the approved
+one. `pricing.mjs` and `ledger.mjs` implement all of that;
+[`docs/credits.md`](../../docs/credits.md) explains why each piece is there.
 
 ## Mounting in an app you already have
 
