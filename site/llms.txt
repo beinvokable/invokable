@@ -1,0 +1,30 @@
+# Invokable
+
+> Invokable is an open source SDK (MIT) that makes an API or CLI usable by AI agents. It provides the four layers every agent tool needs: browser-based device-code login, one structured JSON document on stdout with semantic exit codes, self-installing agent instructions (SKILL.md for Claude, Codex, Cursor, Gemini and any Agent Skills host), and server-signed approval checkpoints for actions that cost money or carry risk.
+
+Tagline: Turn your API into a tool AI agents can actually use.
+Audience: developer tools teams, SaaS products, platform builders, companies preparing products for agent-native usage.
+
+## Key facts
+
+- Exit codes: 0 ok · 1 error · 2 usage · 3 auth · 4 insufficient_spend · 5 not_found · 6 conflict · 7 rate_limited · 10 checkpoint_pending · 11 timeout · 12 checkpoint_stale · 15 network · 20 declined. Tools may add codes in 30–99.
+- Every error carries a `remediation`: the literal next command to run.
+- Checkpoint fingerprints are issued by the server, bound to (gate, subject, summary), expire after 24h and are consumed exactly once. Replays and changed plans are refused.
+- `init` writes a byte-identical SKILL.md to .claude, .codex, .cursor, .gemini and .agents, and updates AGENTS.md, CLAUDE.md, Copilot instructions and Cursor rules. `init --check` exits 30 when stale.
+- `invokable-test` is a conformance checker that works on any CLI.
+- Over MCP, `status: "checkpoint"` becomes an elicitation so a person approves spend, not the model.
+
+## Packages
+
+- [@invokable/core](https://www.npmjs.com/package/@invokable/core): runtime, output envelope, exit codes, config store, login, checkpoint().
+- [@invokable/server](https://www.npmjs.com/package/@invokable/server): device-flow auth, OAuth 2.1 for remote MCP clients, checkpoint issuing and verification, Postgres stores.
+- [@invokable/skills](https://www.npmjs.com/package/@invokable/skills): generates and installs SKILL.md for every major agent.
+- [@invokable/conformance](https://www.npmjs.com/package/@invokable/conformance): `invokable-test`.
+- [create-invokable](https://www.npmjs.com/package/create-invokable): project scaffolder.
+
+## Links
+
+- [Source](https://github.com/beinvokable/invokable)
+- [Building a tool](https://github.com/beinvokable/invokable/blob/main/docs/building-a-tool.md)
+- [MCP guide](https://github.com/beinvokable/invokable/blob/main/docs/mcp.md)
+- [Credits](https://github.com/beinvokable/invokable/blob/main/docs/credits.md)
